@@ -89,14 +89,14 @@ int main( int argc, char **argv ) {
         return EXIT_FAILURE;
     }
 
-    if ( parser.isSet( "server" ) == false && parser.isSet( "client" ) == false ) {
+    if ( (parser.isSet( "server" ) == false) && (parser.isSet( "client" ) == false) ) {
         std::cerr << "[Error]: Please specify one of --server|--client" << std::endl << std::endl;
         printHelpText();
 
         return EXIT_FAILURE;
     }
 
-    if ( strcmp( argv[ 1 ], "--server" ) != 0 && strcmp( argv[ 1 ], "--client" ) != 0 ) {
+    if ( (strcmp( argv[ 1 ], "--server" ) != 0) && (strcmp( argv[ 1 ], "--client" ) != 0) ) {
         std::cerr << "[Error]: Please specify one of --server|--client" << std::endl << std::endl;
         printHelpText();
 
@@ -105,7 +105,7 @@ int main( int argc, char **argv ) {
 
     Wayland::Scribe scribe;
 
-    QString specFile = ( parser.isSet( "server" ) ? parser.value( "server" ) : parser.value( "client" ) );
+    QString specFile = (parser.isSet( "server" ) ? parser.value( "server" ) : parser.value( "client" ) );
 
     /** Set the protocol file path */
     scribe.setRunMode( specFile, parser.isSet( "server" ) );

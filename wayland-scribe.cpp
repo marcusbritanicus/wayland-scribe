@@ -446,10 +446,10 @@ void Wayland::Scribe::generateServerHeader( FILE *head, std::vector<WaylandInter
     fprintf( head, "#include \"wayland-server-core.h\"\n" );
 
     if ( mHeaderPath.isEmpty() ) {
-        fprintf( head, "#include \"%s.h\"\n\n", QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+        fprintf( head, "#include \"%s-server.h\"\n\n", QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
     else {
-        fprintf( head, "#include <%s/%s.h>\n\n", mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+        fprintf( head, "#include <%s/%s-server.h>\n\n", mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
 
     fprintf( head, "#include <iostream>\n" );
@@ -602,17 +602,15 @@ void Wayland::Scribe::generateServerHeader( FILE *head, std::vector<WaylandInter
 
 void Wayland::Scribe::generateServerCode( FILE *code, std::vector<WaylandInterface> interfaces ) {
     if ( mHeaderPath.isEmpty() ) {
-        fprintf( code, "#include \"%s.h\"\n",          QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+        fprintf( code, "#include \"%s-server.h\"\n",          QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
         fprintf( code, "#include \"%s-server.hpp\"\n", QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
     else {
-        fprintf( code, "#include <%s/%s.h>\n",          mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+        fprintf( code, "#include <%s/%s-server.h>\n",          mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
         fprintf( code, "#include <%s/%s-server.hpp>\n", mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
 
     fprintf( code, "\n" );
-    fprintf( code, "namespace Wayland {\n" );
-    fprintf( code, "namespace Server {\n" );
 
     bool needsNewLine = false;
     for (const WaylandInterface& interface : interfaces) {
@@ -631,141 +629,131 @@ void Wayland::Scribe::generateServerCode( FILE *code, std::vector<WaylandInterfa
         QByteArray interfaceNameStrippedBA = stripInterfaceName( interface.name, false );
         const char *interfaceNameStripped  = interfaceNameStrippedBA.data();
 
-        fprintf( code, "    %s::%s(struct ::wl_client *client, uint32_t id, int version)\n", interfaceName, interfaceName );
-        fprintf( code, "        : m_resource_map()\n" );
-        fprintf( code, "        , m_resource(nullptr)\n" );
-        fprintf( code, "        , m_global(nullptr) {\n" );
-        fprintf( code, "        init(client, id, version);\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "Wayland::Server::%s::%s(struct ::wl_client *client, uint32_t id, int version) {\n", interfaceName, interfaceName );
+        fprintf( code, "    m_resource_map.clear();\n" );
+        fprintf( code, "    init(client, id, version);\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s::%s(struct ::wl_display *display, int version)\n", interfaceName, interfaceName );
-        fprintf( code, "        : m_resource_map()\n" );
-        fprintf( code, "        , m_resource(nullptr)\n" );
-        fprintf( code, "        , m_global(nullptr) {\n" );
-        fprintf( code, "        init(display, version);\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "Wayland::Server::%s::%s(struct ::wl_display *display, int version) {\n", interfaceName, interfaceName );
+        fprintf( code, "    m_resource_map.clear();\n" );
+        fprintf( code, "    init(display, version);\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s::%s(struct ::wl_resource *resource)\n", interfaceName, interfaceName );
-        fprintf( code, "        : m_resource_map()\n" );
-        fprintf( code, "        , m_resource(nullptr)\n" );
-        fprintf( code, "        , m_global(nullptr) {\n" );
-        fprintf( code, "        init(resource);\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "Wayland::Server::%s::%s(struct ::wl_resource *resource) {\n", interfaceName, interfaceName );
+        fprintf( code, "    m_resource_map.clear();\n" );
+        fprintf( code, "    init(resource);\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s::%s()\n", interfaceName, interfaceName );
-        fprintf( code, "        : m_resource_map()\n" );
-        fprintf( code, "        , m_resource(nullptr)\n" );
-        fprintf( code, "        , m_global(nullptr) {\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "Wayland::Server::%s::%s() {\n", interfaceName, interfaceName );
+        fprintf( code, "    m_resource_map.clear();\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s::~%s() {\n", interfaceName, interfaceName );
-        fprintf( code, "        for (auto it = m_resource_map.begin(); it != m_resource_map.end(); ) {\n" );
-        fprintf( code, "            Resource *resourcePtr = it->second;\n" );
+        fprintf( code, "Wayland::Server::%s::~%s() {\n", interfaceName, interfaceName );
+        fprintf( code, "    for (auto it = m_resource_map.begin(); it != m_resource_map.end(); ) {\n" );
+        fprintf( code, "        Resource *resourcePtr = it->second;\n" );
         fprintf( code, "\n" );
-        fprintf( code, "            // Delete the Resource object pointed to by resourcePtr\n" );
-        fprintf( code, "            resourcePtr->%sObject = nullptr;\n", interfaceNameStripped );
-        fprintf( code, "        }\n" );
-        fprintf( code, "\n" );
-        fprintf( code, "        if (m_resource)\n" );
-        fprintf( code, "            m_resource->%sObject = nullptr;\n", interfaceNameStripped );
-        fprintf( code, "\n" );
-        fprintf( code, "        if (m_global) {\n" );
-        fprintf( code, "            wl_global_destroy(m_global);\n" );
-        fprintf( code, "            wl_list_remove(&m_displayDestroyedListener.link);\n" );
-        fprintf( code, "        }\n" );
+        fprintf( code, "        // Delete the Resource object pointed to by resourcePtr\n" );
+        fprintf( code, "        resourcePtr->%sObject = nullptr;\n", interfaceNameStripped );
         fprintf( code, "    }\n" );
         fprintf( code, "\n" );
-
-        fprintf( code, "    void %s::init(struct ::wl_client *client, uint32_t id, int version) {\n", interfaceName );
-        fprintf( code, "        m_resource = bind(client, id, version);\n" );
+        fprintf( code, "    if (m_resource)\n" );
+        fprintf( code, "        m_resource->%sObject = nullptr;\n", interfaceNameStripped );
+        fprintf( code, "\n" );
+        fprintf( code, "    if (m_global) {\n" );
+        fprintf( code, "        wl_global_destroy(m_global);\n" );
+        fprintf( code, "        wl_list_remove(&m_displayDestroyedListener.link);\n" );
         fprintf( code, "    }\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    void %s::init(struct ::wl_resource *resource) {\n", interfaceName );
-        fprintf( code, "        m_resource = bind(resource);\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "void Wayland::Server::%s::init(struct ::wl_client *client, uint32_t id, int version) {\n", interfaceName );
+        fprintf( code, "    m_resource = bind(client, id, version);\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s::Resource *%s::add(struct ::wl_client *client, int version) {\n", interfaceName, interfaceName );
-        fprintf( code, "        Resource *resource = bind(client, 0, version);\n" );
-        fprintf( code, "        m_resource_map.insert(std::pair{client, resource});\n" );
-        fprintf( code, "        return resource;\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "void Wayland::Server::%s::init(struct ::wl_resource *resource) {\n", interfaceName );
+        fprintf( code, "    m_resource = bind(resource);\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s::Resource *%s::add(struct ::wl_client *client, uint32_t id, int version) {\n", interfaceName, interfaceName );
-        fprintf( code, "        Resource *resource = bind(client, id, version);\n" );
-        fprintf( code, "        m_resource_map.insert(std::pair{client, resource});\n" );
-        fprintf( code, "        return resource;\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "Wayland::Server::%s::Resource *Wayland::Server::%s::add(struct ::wl_client *client, int version) {\n", interfaceName, interfaceName );
+        fprintf( code, "    Resource *resource = bind(client, 0, version);\n" );
+        fprintf( code, "    m_resource_map.insert(std::pair{client, resource});\n" );
+        fprintf( code, "    return resource;\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    void %s::init(struct ::wl_display *display, int version) {\n",                           interfaceName );
-        fprintf( code, "        m_global = wl_global_create(display, &::%s_interface, version, this, bind_func);\n", interface.name.constData() );
-        fprintf( code, "        m_displayDestroyedListener.notify = %s::display_destroy_func;\n",                    interfaceName );
-        fprintf( code, "        m_displayDestroyedListener.parent = this;\n" );
-        fprintf( code, "        wl_display_add_destroy_listener(display, &m_displayDestroyedListener);\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "Wayland::Server::%s::Resource *Wayland::Server::%s::add(struct ::wl_client *client, uint32_t id, int version) {\n", interfaceName, interfaceName );
+        fprintf( code, "    Resource *resource = bind(client, id, version);\n" );
+        fprintf( code, "    m_resource_map.insert(std::pair{client, resource});\n" );
+        fprintf( code, "    return resource;\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    const struct wl_interface *%s::interface() {\n", interfaceName );
-        fprintf( code, "        return &::%s_interface;\n",                  interface.name.constData() );
-        fprintf( code, "    }\n" );
+        fprintf( code, "void Wayland::Server::%s::init(struct ::wl_display *display, int version) {\n",                           interfaceName );
+        fprintf( code, "    m_global = wl_global_create(display, &::%s_interface, version, this, bind_func);\n", interface.name.constData() );
+        fprintf( code, "    m_displayDestroyedListener.notify = %s::display_destroy_func;\n",                    interfaceName );
+        fprintf( code, "    m_displayDestroyedListener.parent = this;\n" );
+        fprintf( code, "    wl_display_add_destroy_listener(display, &m_displayDestroyedListener);\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s::Resource *%s::allocate() {\n", interfaceName, interfaceName );
-        fprintf( code, "        return new Resource;\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "const struct wl_interface *Wayland::Server::%s::interface() {\n", interfaceName );
+        fprintf( code, "    return &::%s_interface;\n",                  interface.name.constData() );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    void %s::bindResource(Resource *) {\n", interfaceName );
-        fprintf( code, "    }\n" );
+        fprintf( code, "Wayland::Server::%s::Resource *Wayland::Server::%s::allocate() {\n", interfaceName, interfaceName );
+        fprintf( code, "    return new Resource;\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    void %s::destroyResource(Resource *) {\n", interfaceName );
-        fprintf( code, "    }\n" );
+        fprintf( code, "void Wayland::Server::%s::bindResource(Resource *) {\n", interfaceName );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    void %s::bind_func(struct ::wl_client *client, void *data, uint32_t version, uint32_t id)\n", interfaceName );
-        fprintf( code, "    {\n" );
-        fprintf( code, "        %s *that = static_cast<%s *>(data);\n",                                                   interfaceName, interfaceName );
-        fprintf( code, "        that->add(client, id, version);\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "void Wayland::Server::%s::destroyResource(Resource *) {\n", interfaceName );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    void %s::display_destroy_func(struct ::wl_listener *listener, void *) {\n",       interfaceName );
-        fprintf( code, "        %s *that = static_cast<%s::DisplayDestroyedListener *>(listener)->parent;\n", interfaceName, interfaceName );
-        fprintf( code, "        that->m_global = nullptr;\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "void Wayland::Server::%s::bind_func(struct ::wl_client *client, void *data, uint32_t version, uint32_t id) {\n", interfaceName );
+        fprintf( code, "    %s *that = static_cast<%s *>(data);\n",                                                   interfaceName, interfaceName );
+        fprintf( code, "    that->add(client, id, version);\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    void %s::destroy_func(struct ::wl_resource *client_resource)\n", interfaceName );
-        fprintf( code, "    {\n" );
-        fprintf( code, "        Resource *resource = Resource::fromResource(client_resource);\n" );
-        fprintf( code, "        %s *that = resource->%sObject;\n",                           interfaceName, interfaceNameStripped );
-        fprintf( code, "        if (that) {\n" );
-        fprintf( code, "            auto it = that->m_resource_map.begin();\n" );
-        fprintf( code, "            while ( it != that->m_resource_map.end() ) {\n" );
-        fprintf( code, "                if ( it->first == resource->client() ) {\n" );
-        fprintf( code, "                    it = that->m_resource_map.erase( it );\n" );
-        fprintf( code, "                }\n" );
+        fprintf( code, "void Wayland::Server::%s::display_destroy_func(struct ::wl_listener *listener, void *) {\n",       interfaceName );
+        fprintf( code, "    %s *that = static_cast<%s::DisplayDestroyedListener *>(listener)->parent;\n", interfaceName, interfaceName );
+        fprintf( code, "    that->m_global = nullptr;\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
-        fprintf( code, "                else {\n" );
-        fprintf( code, "                    ++it;\n" );
-        fprintf( code, "                }\n" );
+
+        fprintf( code, "void Wayland::Server::%s::destroy_func(struct ::wl_resource *client_resource) {\n", interfaceName );
+        fprintf( code, "    Resource *resource = Resource::fromResource(client_resource);\n" );
+        fprintf( code, "    %s *that = resource->%sObject;\n",                           interfaceName, interfaceNameStripped );
+        fprintf( code, "    if (that) {\n" );
+        fprintf( code, "        auto it = that->m_resource_map.begin();\n" );
+        fprintf( code, "        while ( it != that->m_resource_map.end() ) {\n" );
+        fprintf( code, "            if ( it->first == resource->client() ) {\n" );
+        fprintf( code, "                it = that->m_resource_map.erase( it );\n" );
         fprintf( code, "            }\n" );
-        fprintf( code, "            that->destroyResource(resource);\n" );
         fprintf( code, "\n" );
-        fprintf( code, "            that = resource->%sObject;\n", interfaceNameStripped );
-        fprintf( code, "            if (that && that->m_resource == resource)\n" );
-        fprintf( code, "                that->m_resource = nullptr;\n" );
+        fprintf( code, "            else {\n" );
+        fprintf( code, "                ++it;\n" );
+        fprintf( code, "            }\n" );
         fprintf( code, "        }\n" );
-        fprintf( code, "        delete resource;\n" );
+        fprintf( code, "        that->destroyResource(resource);\n" );
+        fprintf( code, "\n" );
+        fprintf( code, "        that = resource->%sObject;\n", interfaceNameStripped );
+        fprintf( code, "        if (that && that->m_resource == resource)\n" );
+        fprintf( code, "            that->m_resource = nullptr;\n" );
         fprintf( code, "    }\n" );
+        fprintf( code, "    delete resource;\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
         bool hasRequests = !interface.requests.empty();
@@ -775,37 +763,35 @@ void Wayland::Scribe::generateServerCode( FILE *code, std::vector<WaylandInterfa
         //We should consider changing bind so that it doesn't special case id == 0
         //and use function overloading instead. Jan do you have a lot of code dependent on this
         // behavior?
-        fprintf( code, "    %s::Resource *%s::bind(struct ::wl_client *client, uint32_t id, int version)\n",                 interfaceName, interfaceName );
-        fprintf( code, "    {\n" );
-        fprintf( code, "        struct ::wl_resource *handle = wl_resource_create(client, &::%s_interface, version, id);\n", interface.name.constData() );
-        fprintf( code, "        return bind(handle);\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "Wayland::Server::%s::Resource *Wayland::Server::%s::bind(struct ::wl_client *client, uint32_t id, int version) {\n", interfaceName, interfaceName );
+        fprintf( code, "    struct ::wl_resource *handle = wl_resource_create(client, &::%s_interface, version, id);\n", interface.name.constData() );
+        fprintf( code, "    return bind(handle);\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s::Resource *%s::bind(struct ::wl_resource *handle)\n",                  interfaceName, interfaceName );
-        fprintf( code, "    {\n" );
-        fprintf( code, "        Resource *resource = allocate();\n" );
-        fprintf( code, "        resource->%sObject = this;\n",                                        interfaceNameStripped );
+        fprintf( code, "Wayland::Server::%s::Resource *Wayland::Server::%s::bind(struct ::wl_resource *handle) {\n", interfaceName, interfaceName );
+        fprintf( code, "    Resource *resource = allocate();\n" );
+        fprintf( code, "    resource->%sObject = this;\n",                                        interfaceNameStripped );
         fprintf( code, "\n" );
-        fprintf( code, "        wl_resource_set_implementation(handle, %s, resource, destroy_func);", interfaceMember.constData() );
+        fprintf( code, "    wl_resource_set_implementation(handle, %s, resource, destroy_func);", interfaceMember.constData() );
         fprintf( code, "\n" );
-        fprintf( code, "        resource->handle = handle;\n" );
-        fprintf( code, "        bindResource(resource);\n" );
-        fprintf( code, "        return resource;\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "    resource->handle = handle;\n" );
+        fprintf( code, "    bindResource(resource);\n" );
+        fprintf( code, "    return resource;\n" );
+        fprintf( code, "}\n" );
+        fprintf( code, "\n" );
 
-        fprintf( code, "    %s::Resource *%s::Resource::fromResource(struct ::wl_resource *resource)\n", interfaceName, interfaceName );
-        fprintf( code, "    {\n" );
-        fprintf( code, "        if (!resource)\n" );
-        fprintf( code, "            return nullptr;\n" );
-        fprintf( code, "        if (wl_resource_instance_of(resource, &::%s_interface, %s))\n", interface.name.constData(), interfaceMember.constData() );
-        fprintf( code, "            return static_cast<Resource *>(wl_resource_get_user_data(resource));\n" );
+        fprintf( code, "Wayland::Server::%s::Resource *Wayland::Server::%s::Resource::fromResource(struct ::wl_resource *resource) {\n", interfaceName, interfaceName );
+        fprintf( code, "    if (!resource)\n" );
         fprintf( code, "        return nullptr;\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "    if (wl_resource_instance_of(resource, &::%s_interface, %s))\n", interface.name.constData(), interfaceMember.constData() );
+        fprintf( code, "        return static_cast<Resource *>(wl_resource_get_user_data(resource));\n" );
+        fprintf( code, "    return nullptr;\n" );
+        fprintf( code, "}\n" );
 
         if ( hasRequests ) {
             fprintf( code, "\n" );
-            fprintf( code, "    const struct ::%s_interface %s::m_%s_interface = {", interface.name.constData(), interfaceName, interface.name.constData() );
+            fprintf( code, "const struct ::%s_interface Wayland::Server::%s::m_%s_interface = {", interface.name.constData(), interfaceName, interface.name.constData() );
             bool needsComma = false;
             for (const WaylandEvent& e : interface.requests) {
                 if ( needsComma ) {
@@ -814,32 +800,31 @@ void Wayland::Scribe::generateServerCode( FILE *code, std::vector<WaylandInterfa
 
                 needsComma = true;
                 fprintf( code, "\n" );
-                fprintf( code, "        %s::handle%s", interfaceName, snakeCaseToCamelCase( e.name, true ).constData() );
+                fprintf( code, "    Wayland::Server::%s::handle%s", interfaceName, snakeCaseToCamelCase( e.name, true ).constData() );
             }
             fprintf( code, "\n" );
-            fprintf( code, "    };\n" );
+            fprintf( code, "};\n" );
 
             for (const WaylandEvent& e : interface.requests) {
                 fprintf( code, "\n" );
-                fprintf( code, "    void %s::", interfaceName );
+                fprintf( code, "void Wayland::Server::%s::", interfaceName );
                 printEvent( code, e, true );
-                fprintf( code, "\n" );
-                fprintf( code, "    {\n" );
-                fprintf( code, "    }\n" );
+                fprintf( code, " {\n" );
+                fprintf( code, "}\n" );
             }
             fprintf( code, "\n" );
 
             for (const WaylandEvent& e : interface.requests) {
                 fprintf( code, "\n" );
-                fprintf( code, "    void %s::", interfaceName );
+                fprintf( code, "void Wayland::Server::%s::", interfaceName );
 
                 printEventHandlerSignature( code, e, interfaceName );
                 fprintf( code, " {\n" );
-                fprintf( code, "        Resource *r = Resource::fromResource(resource);\n" );
-                fprintf( code, "        if (!r->%sObject) {\n", interfaceNameStripped );
+                fprintf( code, "    Resource *r = Resource::fromResource(resource);\n" );
+                fprintf( code, "    if (!r->%sObject) {\n", interfaceNameStripped );
 
                 if ( e.type == "destructor" ) {
-                    fprintf( code, "            wl_resource_destroy(resource);\n" );
+                    fprintf( code, "        wl_resource_destroy(resource);\n" );
                 }
 
                 QByteArray eventNameBA = snakeCaseToCamelCase( e.name, false );
@@ -847,25 +832,24 @@ void Wayland::Scribe::generateServerCode( FILE *code, std::vector<WaylandInterfa
                 // QByteArray eventRequestBA = snakeCaseToCamelCase(e.request, false);
                 // const char *eventRequest  = eventRequestBA.constData();
 
-                fprintf( code, "            return;\n" );
-                fprintf( code, "        }\n" );
-                fprintf( code, "        static_cast<%s *>(r->%sObject)->%s(\n", interfaceName, interfaceNameStripped, eventName );
-                fprintf( code, "            r" );
+                fprintf( code, "        return;\n" );
+                fprintf( code, "    }\n" );
+                fprintf( code, "    static_cast<%s *>(r->%sObject)->%s(r", interfaceName, interfaceNameStripped, eventName );
                 for (const WaylandArgument& a : e.arguments) {
-                    fprintf( code, ",\n" );
+                    fprintf( code, ", " );
                     QByteArray cType        = waylandToCType( a.type, a.interface );
                     QByteArray qtType       = waylandToQtType( a.type, a.interface, e.request );
                     QByteArray argumentName = snakeCaseToCamelCase( a.name, false );
 
                     if ( cType == qtType ) {
-                        fprintf( code, "            %s", argumentName.constData() );
+                        fprintf( code, "%s", argumentName.constData() );
                     }
                     else if ( a.type == "string" ) {
-                        fprintf( code, "            QString::fromUtf8(%s)", argumentName.constData() );
+                        fprintf( code, "QString::fromUtf8(%s)", argumentName.constData() );
                     }
                 }
                 fprintf( code, ");\n" );
-                fprintf( code, "    }\n" );
+                fprintf( code, "}\n" );
             }
         }
 
@@ -876,24 +860,23 @@ void Wayland::Scribe::generateServerCode( FILE *code, std::vector<WaylandInterfa
             // const char *eventRequest  = eventRequestBA.constData();
 
             fprintf( code, "\n" );
-            fprintf( code, "    void %s::send", interfaceName );
+            fprintf( code, "void Wayland::Server::%s::send", interfaceName );
             printEvent( code, e, false, false, true );
-            fprintf( code, "\n" );
-            fprintf( code, "    {\n" );
-            fprintf( code, "        if (!m_resource) {\n" );
-            fprintf( code, "            return;\n" );
-            fprintf( code, "        }\n" );
-            fprintf( code, "        send%s(\n", eventName );
-            fprintf( code, "            m_resource->handle" );
+            fprintf( code, "{\n" );
+            fprintf( code, "    if (!m_resource) {\n" );
+            fprintf( code, "        return;\n" );
+            fprintf( code, "    }\n" );
+            fprintf( code, "    send%s(\n", eventName );
+            fprintf( code, "        m_resource->handle" );
             for (const WaylandArgument& a : e.arguments) {
-                fprintf( code, ",\n" );
-                fprintf( code, "            %s", a.name.constData() );
+                fprintf( code, ", " );
+                fprintf( code, "%s", a.name.constData() );
             }
             fprintf( code, ");\n" );
-            fprintf( code, "    }\n" );
+            fprintf( code, "}\n" );
             fprintf( code, "\n" );
 
-            fprintf( code, "    void %s::send", interfaceName );
+            fprintf( code, "void Wayland::Server::%s::send", interfaceName );
             printEvent( code, e, false, true, true );
             fprintf( code, " {\n" );
 
@@ -905,39 +888,37 @@ void Wayland::Scribe::generateServerCode( FILE *code, std::vector<WaylandInterfa
                 QByteArray array         = a.name + "_data";
                 const char *arrayName    = array.constData();
                 const char *variableName = a.name.constData();
-                fprintf( code, "        struct wl_array %s;\n",                                                arrayName );
-                fprintf( code, "        %s.size = %s.size();\n",                                               arrayName, variableName );
-                fprintf( code, "        %s.data = static_cast<void *>(const_cast<char *>(%s.constData()));\n", arrayName, variableName );
-                fprintf( code, "        %s.alloc = 0;\n",                                                      arrayName );
+                fprintf( code, "    struct wl_array %s;\n",                                                arrayName );
+                fprintf( code, "    %s.size = %s.size();\n",                                               arrayName, variableName );
+                fprintf( code, "    %s.data = static_cast<void *>(const_cast<char *>(%s.constData()));\n", arrayName, variableName );
+                fprintf( code, "    %s.alloc = 0;\n",                                                      arrayName );
                 fprintf( code, "\n" );
             }
 
-            fprintf( code, "        %s_send_%s(\n", interface.name.constData(), e.name.constData() );
-            fprintf( code, "            resource" );
+            fprintf( code, "    %s_send_%s(", interface.name.constData(), e.name.constData() );
+            fprintf( code, "resource" );
 
             for (const WaylandArgument& a : e.arguments) {
-                fprintf( code, ",\n" );
+                fprintf( code, ", " );
                 QByteArray cType  = waylandToCType( a.type, a.interface );
                 QByteArray qtType = waylandToQtType( a.type, a.interface, e.request );
 
                 if ( a.type == "string" ) {
-                    fprintf( code, "            %s.toUtf8().constData()", a.name.constData() );
+                    fprintf( code, "%s.toUtf8().constData()", a.name.constData() );
                 }
                 else if ( a.type == "array" ) {
-                    fprintf( code, "            &%s_data", a.name.constData() );
+                    fprintf( code, "&%s_data", a.name.constData() );
                 }
                 else if ( cType == qtType ) {
-                    fprintf( code, "            %s", a.name.constData() );
+                    fprintf( code, "%s", a.name.constData() );
                 }
             }
 
             fprintf( code, ");\n" );
-            fprintf( code, "    }\n" );
+            fprintf( code, "}\n" );
             fprintf( code, "\n" );
         }
     }
-    fprintf( code, "}\n" );
-    fprintf( code, "}\n" );
     fprintf( code, "\n" );
 }
 
@@ -960,7 +941,8 @@ void Wayland::Scribe::generateClientHeader( FILE *head, std::vector<WaylandInter
     QByteArray clientExport;
 
     fprintf( head, "\n" );
-    fprintf( head, "namespace WaylandClient {\n" );
+    fprintf( head, "namespace Wayland {\n" );
+    fprintf( head, "namespace Client {\n" );
 
     bool needsNewLine = false;
     for (const WaylandInterface& interface : interfaces) {
@@ -974,8 +956,8 @@ void Wayland::Scribe::generateClientHeader( FILE *head, std::vector<WaylandInter
 
         needsNewLine = true;
 
-        QByteArray interfaceNameBA         = snakeCaseToCamelCase( interface.name, true );
-        const char *interfaceName          = interfaceNameBA.data();
+        QByteArray interfaceNameBA = snakeCaseToCamelCase( interface.name, true );
+        const char *interfaceName  = interfaceNameBA.data();
 
         fprintf( head, "    class %s %s\n    {\n",
                  clientExport.constData(), interfaceName );
@@ -989,8 +971,8 @@ void Wayland::Scribe::generateClientHeader( FILE *head, std::vector<WaylandInter
         fprintf( head, "        void init(struct ::wl_registry *registry, uint32_t id, int version);\n" );
         fprintf( head, "        void init(struct ::%s *object);\n",                               interface.name.constData() );
         fprintf( head, "\n" );
-        fprintf( head, "        struct ::%s *object() { return m_%s; }\n",                         interface.name.constData(), interface.name.constData() );
-        fprintf( head, "        const struct ::%s *object() const { return m_%s; }\n",             interface.name.constData(), interface.name.constData() );
+        fprintf( head, "        struct ::%s *object() { return m_%s; }\n",                        interface.name.constData(), interface.name.constData() );
+        fprintf( head, "        const struct ::%s *object() const { return m_%s; }\n",            interface.name.constData(), interface.name.constData() );
         fprintf( head, "        static %s *fromObject(struct ::%s *object);\n",                   interfaceName,              interface.name.constData() );
         fprintf( head, "\n" );
         fprintf( head, "        bool isInitialized() const;\n" );
@@ -1052,32 +1034,30 @@ void Wayland::Scribe::generateClientHeader( FILE *head, std::vector<WaylandInter
         fprintf( head, "    };\n" );
     }
     fprintf( head, "}\n" );
+    fprintf( head, "}\n" );
     fprintf( head, "\n" );
 }
 
 
 void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterface> interfaces ) {
     if ( mHeaderPath.isEmpty() ) {
-        fprintf( code, "#include \"%s-client.h\"\n",          QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+        fprintf( code, "#include \"%s-client.h\"\n",   QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
         fprintf( code, "#include \"%s-client.hpp\"\n", QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
     else {
-        fprintf( code, "#include <%s/%s-client.h>\n",          mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+        fprintf( code, "#include <%s/%s-client.h>\n",   mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
         fprintf( code, "#include <%s/%s-client.hpp>\n", mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
 
     fprintf( code, "\n" );
-    fprintf( code, "\n" );
-    fprintf( code, "namespace WaylandClient {\n" );
-    fprintf( code, "\n" );
 
     // wl_registry_bind is part of the protocol, so we can't use that... instead we use core
     // libwayland API to do the same thing a wayland-scanner generated wl_registry_bind would.
-    fprintf( code, "    static inline void *wlRegistryBind(struct ::wl_registry *registry, uint32_t name, const struct ::wl_interface *interface, uint32_t version) {\n" );
-    fprintf( code, "        const uint32_t bindOpCode = 0;\n" );
-    fprintf( code, "        return (void *) wl_proxy_marshal_constructor_versioned((struct wl_proxy *) registry, " );
+    fprintf( code, "static inline void *wlRegistryBind(struct ::wl_registry *registry, uint32_t name, const struct ::wl_interface *interface, uint32_t version) {\n" );
+    fprintf( code, "    const uint32_t bindOpCode = 0;\n" );
+    fprintf( code, "    return (void *) wl_proxy_marshal_constructor_versioned((struct wl_proxy *) registry, " );
     fprintf( code, " bindOpCode, interface, version, name, interface->name, version, nullptr);\n" );
-    fprintf( code, "    }\n" );
+    fprintf( code, "}\n" );
     fprintf( code, "\n" );
 
     bool needsNewLine = false;
@@ -1092,84 +1072,82 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
 
         needsNewLine = true;
 
-        QByteArray interfaceNameBA         = snakeCaseToCamelCase( interface.name, true );
-        const char *interfaceName          = interfaceNameBA.data();
+        QByteArray interfaceNameBA = snakeCaseToCamelCase( interface.name, true );
+        const char *interfaceName  = interfaceNameBA.data();
 
         bool hasEvents = !interface.events.empty();
 
-        fprintf( code, "    %s::%s(struct ::wl_registry *registry, uint32_t id, int version) {\n", interfaceName, interfaceName );
-        fprintf( code, "        init(registry, id, version);\n" );
-        fprintf( code, "    }\n" );
+        fprintf( code, "Wayland::Client::%s::%s(struct ::wl_registry *registry, uint32_t id, int version) {\n", interfaceName, interfaceName );
+        fprintf( code, "    init(registry, id, version);\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s::%s(struct ::%s *obj)\n", interfaceName, interfaceName, interface.name.constData() );
-        fprintf( code, "        : m_%s(obj) {\n",         interface.name.constData() );
+        fprintf( code, "Wayland::Client::%s::%s(struct ::%s *obj)\n", interfaceName, interfaceName, interface.name.constData() );
+        fprintf( code, "    : m_%s(obj) {\n",        interface.name.constData() );
 
         if ( hasEvents ) {
-            fprintf( code, "        init_listener();\n" );
+            fprintf( code, "    init_listener();\n" );
         }
 
-        fprintf( code, "    }\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s::%s()\n",             interfaceName, interfaceName );
-        fprintf( code, "        : m_%s(nullptr) {\n", interface.name.constData() );
-        fprintf( code, "    }\n" );
+        fprintf( code, "Wayland::Client::%s::%s()\n",              interfaceName, interfaceName );
+        fprintf( code, "    : m_%s(nullptr) {\n", interface.name.constData() );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s::~%s() {\n", interfaceName, interfaceName );
-        fprintf( code, "    }\n" );
+        fprintf( code, "Wayland::Client::%s::~%s() {\n", interfaceName, interfaceName );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    void %s::init(struct ::wl_registry *registry, uint32_t id, int version) {\n",                   interfaceName );
-        fprintf( code, "        m_%s = static_cast<struct ::%s *>(wlRegistryBind(registry, id, &%s_interface, version));\n", interface.name.constData(), interface.name.constData(), interface.name.constData() );
+        fprintf( code, "void Wayland::Client::%s::init(struct ::wl_registry *registry, uint32_t id, int version) {\n", interfaceName );
+        fprintf(
+            code, "    m_%s = static_cast<struct ::%s *>(wlRegistryBind(registry, id, &%s_interface, version));\n",
+            interface.name.constData(), interface.name.constData(), interface.name.constData()
+        );
 
         if ( hasEvents ) {
-            fprintf( code, "        init_listener();\n" );
+            fprintf( code, "    init_listener();\n" );
         }
 
-        fprintf( code, "    }\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    void %s::init(struct ::%s *obj) {\n", interfaceName, interface.name.constData() );
-        fprintf( code, "        m_%s = obj;\n",                    interface.name.constData() );
+        fprintf( code, "void Wayland::Client::%s::init(struct ::%s *obj) {\n", interfaceName, interface.name.constData() );
+        fprintf( code, "    m_%s = obj;\n",                   interface.name.constData() );
 
         if ( hasEvents ) {
-            fprintf( code, "        init_listener();\n" );
+            fprintf( code, "    init_listener();\n" );
         }
 
-        fprintf( code, "    }\n" );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s *%s::fromObject(struct ::%s *object)\n", interfaceName, interfaceName, interface.name.constData() );
-        fprintf( code, "    {\n" );
+        fprintf( code, "Wayland::Client::%s *Wayland::Client::%s::fromObject(struct ::%s *object) {\n", interfaceName, interfaceName, interface.name.constData() );
 
         if ( hasEvents ) {
-            fprintf( code, "        if (wl_proxy_get_listener((struct ::wl_proxy *)object) != (void *)&m_%s_listener)\n", interface.name.constData() );
-            fprintf( code, "            return nullptr;\n" );
+            fprintf( code, "    if (wl_proxy_get_listener((struct ::wl_proxy *)object) != (void *)&m_%s_listener)\n", interface.name.constData() );
+            fprintf( code, "        return nullptr;\n" );
         }
 
-        fprintf( code, "        return static_cast<%s *>(%s_get_user_data(object));\n", interfaceName, interface.name.constData() );
-        fprintf( code, "    }\n" );
+        fprintf( code, "    return static_cast<Wayland::Client::%s *>(%s_get_user_data(object));\n", interfaceName, interface.name.constData() );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    bool %s::isInitialized() const\n", interfaceName );
-        fprintf( code, "    {\n" );
-        fprintf( code, "        return m_%s != nullptr;\n",     interface.name.constData() );
-        fprintf( code, "    }\n" );
+        fprintf( code, "bool Wayland::Client::%s::isInitialized() const {\n", interfaceName );
+        fprintf( code, "    return m_%s != nullptr;\n",    interface.name.constData() );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    uint32_t %s::version() const\n",
-                 interfaceName );
-        fprintf( code, "    {\n" );
-        fprintf( code, "        return wl_proxy_get_version(reinterpret_cast<wl_proxy*>(m_%s));\n", interface.name.constData() );
-        fprintf( code, "    }\n" );
+        fprintf( code, "uint32_t Wayland::Client::%s::version() const {\n", interfaceName );
+        fprintf( code, "    return wl_proxy_get_version(reinterpret_cast<wl_proxy*>(m_%s));\n", interface.name.constData() );
+        fprintf( code, "}\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    const struct wl_interface *%s::interface()\n", interfaceName );
-        fprintf( code, "    {\n" );
-        fprintf( code, "        return &::%s_interface;\n",                interface.name.constData() );
-        fprintf( code, "    }\n" );
+        fprintf( code, "const struct wl_interface *Wayland::Client::%s::interface() {\n", interfaceName );
+        fprintf( code, "    return &::%s_interface;\n",                interface.name.constData() );
+        fprintf( code, "}\n" );
 
         for (const WaylandEvent& e : interface.requests) {
             fprintf( code, "\n" );
@@ -1185,10 +1163,9 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
                 }
             }
 
-            fprintf( code, "    %s%s::", new_id_str.constData(), interfaceName );
+            fprintf( code, "%s Wayland::Client::%s::", new_id_str.constData(), interfaceName );
             printEvent( code, e );
-            fprintf( code, "\n" );
-            fprintf( code, "    {\n" );
+            fprintf( code, " {\n" );
             for (const WaylandArgument& a : e.arguments) {
                 if ( a.type != "array" ) {
                     continue;
@@ -1197,15 +1174,16 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
                 QByteArray array         = a.name + "_data";
                 const char *arrayName    = array.constData();
                 const char *variableName = a.name.constData();
-                fprintf( code, "        struct wl_array %s;\n",                                                arrayName );
-                fprintf( code, "        %s.size = %s.size();\n",                                               arrayName, variableName );
-                fprintf( code, "        %s.data = static_cast<void *>(const_cast<char *>(%s.constData()));\n", arrayName, variableName );
-                fprintf( code, "        %s.alloc = 0;\n",                                                      arrayName );
+                fprintf( code, "    struct wl_array %s;\n",                                                arrayName );
+                fprintf( code, "    %s.size = %s.size();\n",                                               arrayName, variableName );
+                fprintf( code, "    %s.data = static_cast<void *>(const_cast<char *>(%s.constData()));\n", arrayName, variableName );
+                fprintf( code, "    %s.alloc = 0;\n",                                                      arrayName );
                 fprintf( code, "\n" );
             }
+
             int actualArgumentCount = new_id ? int(e.arguments.size() ) - 1 : int(e.arguments.size() );
-            fprintf( code, "        %s::%s_%s(\n", new_id ? "return " : "", interface.name.constData(), e.name.constData() );
-            fprintf( code, "            m_%s%s",   interface.name.constData(),           actualArgumentCount > 0 ? "," : "" );
+            fprintf( code, "    %s::%s_%s(", new_id ? "return " : "",    interface.name.constData(), e.name.constData() );
+            fprintf( code, "m_%s%s",   interface.name.constData(), actualArgumentCount > 0 ? ", " : "" );
             bool needsComma = false;
             for (const WaylandArgument& a : e.arguments) {
                 bool isNewId = a.type == "new_id";
@@ -1215,55 +1193,52 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
                 }
 
                 if ( needsComma ) {
-                    fprintf( code, "," );
+                    fprintf( code, ", " );
                 }
 
                 needsComma = true;
-                fprintf( code, "\n" );
 
                 if ( isNewId ) {
-                    fprintf( code, "            interface,\n" );
-                    fprintf( code, "            version" );
+                    fprintf( code, "interface, version" );
                 }
                 else {
                     QByteArray cType  = waylandToCType( a.type, a.interface );
                     QByteArray qtType = waylandToQtType( a.type, a.interface, e.request );
 
                     if ( a.type == "string" ) {
-                        fprintf( code, "            %s.toUtf8().constData()", a.name.constData() );
+                        fprintf( code, "%s.toUtf8().constData()", a.name.constData() );
                     }
 
                     else if ( a.type == "array" ) {
-                        fprintf( code, "            &%s_data", a.name.constData() );
+                        fprintf( code, "&%s_data", a.name.constData() );
                     }
 
                     else if ( cType == qtType ) {
-                        fprintf( code, "            %s", a.name.constData() );
+                        fprintf( code, "%s", a.name.constData() );
                     }
                 }
             }
             fprintf( code, ");\n" );
 
             if ( e.type == "destructor" ) {
-                fprintf( code, "        m_%s = nullptr;\n", interface.name.constData() );
+                fprintf( code, "    m_%s = nullptr;\n", interface.name.constData() );
             }
 
-            fprintf( code, "    }\n" );
+            fprintf( code, "}\n" );
         }
 
         if ( hasEvents ) {
             fprintf( code, "\n" );
             for (const WaylandEvent& e : interface.events) {
-                fprintf( code, "    void %s::", interfaceName );
+                fprintf( code, "void Wayland::Client::%s::", interfaceName );
                 printEvent( code, e, true );
+                fprintf( code, " {\n" );
+                fprintf( code, "}\n" );
                 fprintf( code, "\n" );
-                fprintf( code, "    {\n" );
-                fprintf( code, "    }\n" );
-                fprintf( code, "\n" );
-                fprintf( code, "    void %s::", interfaceName );
+                fprintf( code, "void Wayland::Client::%s::", interfaceName );
                 printEventHandlerSignature( code, e, interface.name.constData() );
                 fprintf( code, " {\n" );
-                fprintf( code, "        static_cast<%s *>(data)->%s(", interfaceName, snakeCaseToCamelCase( e.name.constData(), false ).constData() );
+                fprintf( code, "    static_cast<Wayland::Client::%s *>(data)->%s(", interfaceName, snakeCaseToCamelCase( e.name.constData(), false ).constData() );
                 bool needsComma = false;
                 for (const WaylandArgument& a : e.arguments) {
                     if ( needsComma ) {
@@ -1282,23 +1257,21 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
                 }
                 fprintf( code, ");\n" );
 
-                fprintf( code, "    }\n" );
+                fprintf( code, "}\n" );
                 fprintf( code, "\n" );
             }
-            fprintf( code, "    const struct %s_listener %s::m_%s_listener = {\n", interface.name.constData(), interfaceName, interface.name.constData() );
+            fprintf( code, "const struct %s_listener Wayland::Client::%s::m_%s_listener = {\n", interface.name.constData(), interfaceName, interface.name.constData() );
             for (const WaylandEvent& e : interface.events) {
-                fprintf( code, "        %s::handle%s,\n", interfaceName, snakeCaseToCamelCase( e.name.constData(), true ).constData() );
+                fprintf( code, "    Wayland::Client::%s::handle%s,\n", interfaceName, snakeCaseToCamelCase( e.name.constData(), true ).constData() );
             }
-            fprintf( code, "    };\n" );
+            fprintf( code, "};\n" );
             fprintf( code, "\n" );
 
-            fprintf( code, "    void %s::init_listener()\n",                        interfaceName );
-            fprintf( code, "    {\n" );
-            fprintf( code, "        %s_add_listener(m_%s, &m_%s_listener, this);\n", interface.name.constData(), interface.name.constData(), interface.name.constData() );
-            fprintf( code, "    }\n" );
+            fprintf( code, "void Wayland::Client::%s::init_listener() {\n", interfaceName );
+            fprintf( code, "    %s_add_listener(m_%s, &m_%s_listener, this);\n", interface.name.constData(), interface.name.constData(), interface.name.constData() );
+            fprintf( code, "}\n" );
         }
     }
-    fprintf( code, "}\n" );
     fprintf( code, "\n" );
 }
 
