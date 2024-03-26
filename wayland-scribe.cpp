@@ -30,6 +30,8 @@
 #include <vector>
 #include <filesystem>
 
+#include "wayland-scribe.hpp"
+
 namespace fs = std::filesystem;
 
 QByteArray snakeCaseToCamelCase( QByteArray snakeCaseName, bool capitalize ) {
@@ -51,185 +53,31 @@ QByteArray snakeCaseToCamelCase( QByteArray snakeCaseName, bool capitalize ) {
 }
 
 
-class Scanner {
-    public:
-        explicit Scanner() {}
-        ~Scanner() { delete m_xml; }
-
-        bool parseArguments( int argc, char **argv );
-        void printUsage();
-        bool process();
-        void printErrors();
-
-    private:
-        struct WaylandEnumEntry {
-            QByteArray name;
-            QByteArray value;
-            QByteArray summary;
-        };
-
-        struct WaylandEnum {
-            QByteArray                    name;
-
-            std::vector<WaylandEnumEntry> entries;
-        };
-
-        struct WaylandArgument {
-            QByteArray name;
-            QByteArray type;
-            QByteArray interface;
-            QByteArray summary;
-            bool       allowNull;
-        };
-
-        struct WaylandEvent {
-            bool                         request;
-            QByteArray                   name;
-            QByteArray                   type;
-            std::vector<WaylandArgument> arguments;
-        };
-
-        struct WaylandInterface {
-            QByteArray                name;
-            int                       version;
-
-            std::vector<WaylandEnum>  enums;
-            std::vector<WaylandEvent> events;
-            std::vector<WaylandEvent> requests;
-        };
-
-        bool isServerSide();
-        bool parseOption( const QByteArray& str );
-
-        void generateServerHeader( FILE *head, std::vector<WaylandInterface> interfaces );
-        void generateServerCode( FILE *head, std::vector<WaylandInterface> interfaces );
-
-        void generateClientHeader( FILE *head, std::vector<WaylandInterface> interfaces );
-        void generateClientCode( FILE *head, std::vector<WaylandInterface> interfaces );
-
-        QByteArray byteArrayValue( const QXmlStreamReader& xml, const char *name );
-        int intValue( const QXmlStreamReader& xml, const char *name, int defaultValue = 0 );
-        bool boolValue( const QXmlStreamReader& xml, const char *name );
-        WaylandEvent readEvent( QXmlStreamReader& xml, bool request );
-        Scanner::WaylandEnum readEnum( QXmlStreamReader& xml );
-        Scanner::WaylandInterface readInterface( QXmlStreamReader& xml );
-        QByteArray waylandToCType( const QByteArray& waylandType, const QByteArray& interface );
-        QByteArray waylandToQtType( const QByteArray& waylandType, const QByteArray& interface, bool cStyleArray );
-        const Scanner::WaylandArgument *newIdArgument( const std::vector<WaylandArgument>& arguments );
-
-        void printEvent( FILE *f, const WaylandEvent& e, bool omitNames = false, bool withResource = false, bool capitalize = false );
-        void printEventHandlerSignature( FILE *f, const WaylandEvent& e, const char *interfaceName );
-        void printEnums( FILE *f, const std::vector<WaylandEnum>& enums );
-
-        QByteArray stripInterfaceName( const QByteArray& name, bool );
-        bool ignoreInterface( const QByteArray& name );
-
-        enum Option {
-            ClientHeader,
-            ServerHeader,
-            ClientCode,
-            ServerCode
-        }
-        m_option;
-
-        bool mServer = false;
-        bool mClient = false;
-
-        QByteArray m_protocolName;
-        QByteArray m_protocolFilePath;
-        QByteArray m_scannerName;
-        QByteArray m_headerPath;
-        QByteArray m_prefix;
-        QByteArray m_buildMacro;
-        QList<QByteArray> m_includes;
-        QXmlStreamReader *m_xml = nullptr;
-};
-
-bool Scanner::parseArguments( int argc, char **argv ) {
-    QList<QByteArray> args;
-
-    args.reserve( argc );
-    for (int i = 0; i < argc; ++i) {
-        args << QByteArray( argv[ i ] );
-    }
-
-    m_scannerName = args[ 0 ];
-
-    if ( (argc <= 2) || !parseOption( args[ 1 ] ) ) {
-        return false;
-    }
-
-    m_protocolFilePath = args[ 2 ];
-
-    if ( (argc > 3) && !args[ 3 ].startsWith( '-' ) ) {
-        // legacy positional arguments
-        m_headerPath = args[ 3 ];
-
-        if ( argc == 5 ) {
-            m_prefix = args[ 4 ];
-        }
-    }
-    else {
-        // --header-path=<path> (14 characters)
-        // --prefix=<prefix> (9 characters)
-        // --add-include=<include> (14 characters)
-        for (int pos = 3; pos < argc; pos++) {
-            const QByteArray& option = args[ pos ];
-
-            if ( option.startsWith( "--header-path=" ) ) {
-                m_headerPath = option.mid( 14 );
-            }
-            else if ( option.startsWith( "--prefix=" ) ) {
-                m_prefix = option.mid( 10 );
-            }
-            else if ( option.startsWith( "--build-macro=" ) ) {
-                m_buildMacro = option.mid( 14 );
-            }
-            else if ( option.startsWith( "--add-include=" ) ) {
-                auto include = option.mid( 14 );
-
-                if ( !include.isEmpty() ) {
-                    m_includes << include;
-                }
-            }
-            else {
-                return false;
-            }
-        }
-    }
-
-    return true;
+Wayland::Scribe::Scribe() {
+    mScannerName = "wayland-scribe";
 }
 
 
-void Scanner::printUsage() {
-    fprintf( stderr, "Usage: %s [server|client] specfile [--header-path=<path>] [--prefix=<prefix>] [--add-include=<include>]\n", m_scannerName.constData() );
-}
+void Wayland::Scribe::setRunMode( QString specFile, bool server ) {
+    mProtocolFilePath = specFile.toUtf8();
 
-
-bool Scanner::isServerSide() {
-    return mServer;
-}
-
-
-bool Scanner::parseOption( const QByteArray& str ) {
-    if ( str == "server" ) {
+    if ( server ) {
         mServer = true;
     }
-
-    else if ( str == "client" ) {
-        mClient = true;
-    }
-
-    else {
-        return false;
-    }
-
-    return true;
 }
 
 
-QByteArray Scanner::byteArrayValue( const QXmlStreamReader& xml, const char *name ) {
+void Wayland::Scribe::setArgs( QString headerPath, QString prefix, QStringList includes ) {
+    mHeaderPath = headerPath.toUtf8();
+    mPrefix     = prefix.toUtf8();
+
+    for ( QString inc : includes ) {
+        mIncludes << QString( "<%1>" ).arg( inc ).toUtf8();
+    }
+}
+
+
+QByteArray Wayland::Scribe::byteArrayValue( const QXmlStreamReader& xml, const char *name ) {
     if ( xml.attributes().hasAttribute( name ) ) {
         return xml.attributes().value( name ).toUtf8();
     }
@@ -238,7 +86,7 @@ QByteArray Scanner::byteArrayValue( const QXmlStreamReader& xml, const char *nam
 }
 
 
-int Scanner::intValue( const QXmlStreamReader& xml, const char *name, int defaultValue ) {
+int Wayland::Scribe::intValue( const QXmlStreamReader& xml, const char *name, int defaultValue ) {
     bool ok;
     int  result = byteArrayValue( xml, name ).toInt( &ok );
 
@@ -246,12 +94,12 @@ int Scanner::intValue( const QXmlStreamReader& xml, const char *name, int defaul
 }
 
 
-bool Scanner::boolValue( const QXmlStreamReader& xml, const char *name ) {
+bool Wayland::Scribe::boolValue( const QXmlStreamReader& xml, const char *name ) {
     return byteArrayValue( xml, name ) == "true";
 }
 
 
-Scanner::WaylandEvent Scanner::readEvent( QXmlStreamReader& xml, bool request ) {
+Wayland::Scribe::WaylandEvent Wayland::Scribe::readEvent( QXmlStreamReader& xml, bool request ) {
     WaylandEvent event = {
         .request   = request,
         .name      = byteArrayValue( xml, "name" ),
@@ -277,7 +125,7 @@ Scanner::WaylandEvent Scanner::readEvent( QXmlStreamReader& xml, bool request ) 
 }
 
 
-Scanner::WaylandEnum Scanner::readEnum( QXmlStreamReader& xml ) {
+Wayland::Scribe::WaylandEnum Wayland::Scribe::readEnum( QXmlStreamReader& xml ) {
     WaylandEnum result = {
         .name    = byteArrayValue( xml, "name" ),
         .entries = {},
@@ -300,7 +148,7 @@ Scanner::WaylandEnum Scanner::readEnum( QXmlStreamReader& xml ) {
 }
 
 
-Scanner::WaylandInterface Scanner::readInterface( QXmlStreamReader& xml ) {
+Wayland::Scribe::WaylandInterface Wayland::Scribe::readInterface( QXmlStreamReader& xml ) {
     WaylandInterface interface = {
         .name     = byteArrayValue( xml, "name" ),
         .version  = intValue( xml,       "version",1 ),
@@ -328,7 +176,7 @@ Scanner::WaylandInterface Scanner::readInterface( QXmlStreamReader& xml ) {
 }
 
 
-QByteArray Scanner::waylandToCType( const QByteArray& waylandType, const QByteArray& interface ) {
+QByteArray Wayland::Scribe::waylandToCType( const QByteArray& waylandType, const QByteArray& interface ) {
     if ( waylandType == "string" ) {
         return "const char *";
     }
@@ -348,7 +196,7 @@ QByteArray Scanner::waylandToCType( const QByteArray& waylandType, const QByteAr
         return "wl_array *";
     }
     else if ( (waylandType == "object") || (waylandType == "new_id") ) {
-        if ( isServerSide() ) {
+        if ( mServer ) {
             return "struct ::wl_resource *";
         }
 
@@ -363,7 +211,7 @@ QByteArray Scanner::waylandToCType( const QByteArray& waylandType, const QByteAr
 }
 
 
-QByteArray Scanner::waylandToQtType( const QByteArray& waylandType, const QByteArray& interface, bool cStyleArray ) {
+QByteArray Wayland::Scribe::waylandToQtType( const QByteArray& waylandType, const QByteArray& interface, bool cStyleArray ) {
     if ( waylandType == "string" ) {
         return "const QString &";
     }
@@ -376,7 +224,7 @@ QByteArray Scanner::waylandToQtType( const QByteArray& waylandType, const QByteA
 }
 
 
-const Scanner::WaylandArgument *Scanner::newIdArgument( const std::vector<WaylandArgument>& arguments ) {
+const Wayland::Scribe::WaylandArgument *Wayland::Scribe::newIdArgument( const std::vector<WaylandArgument>& arguments ) {
     for (const WaylandArgument& a : arguments) {
         if ( a.type == "new_id" ) {
             return &a;
@@ -386,11 +234,11 @@ const Scanner::WaylandArgument *Scanner::newIdArgument( const std::vector<Waylan
 }
 
 
-void Scanner::printEvent( FILE *f, const WaylandEvent& e, bool omitNames, bool withResource, bool capitalize ) {
+void Wayland::Scribe::printEvent( FILE *f, const WaylandEvent& e, bool omitNames, bool withResource, bool capitalize ) {
     fprintf( f, "%s(", snakeCaseToCamelCase( e.name, capitalize ).constData() );
     bool needsComma = false;
 
-    if ( isServerSide() ) {
+    if ( mServer ) {
         if ( e.request ) {
             fprintf( f, "Resource *%s", omitNames ? "" : "resource" );
             needsComma = true;
@@ -405,7 +253,7 @@ void Scanner::printEvent( FILE *f, const WaylandEvent& e, bool omitNames, bool w
     for (const WaylandArgument& a : e.arguments) {
         bool isNewId = a.type == "new_id";
 
-        if ( isNewId && !isServerSide() && (a.interface.isEmpty() != e.request) ) {
+        if ( isNewId && !mServer && (a.interface.isEmpty() != e.request) ) {
             continue;
         }
 
@@ -416,7 +264,7 @@ void Scanner::printEvent( FILE *f, const WaylandEvent& e, bool omitNames, bool w
         needsComma = true;
 
         if ( isNewId ) {
-            if ( isServerSide() ) {
+            if ( mServer ) {
                 if ( e.request ) {
                     fprintf( f, "uint32_t" );
 
@@ -435,17 +283,17 @@ void Scanner::printEvent( FILE *f, const WaylandEvent& e, bool omitNames, bool w
             }
         }
 
-        QByteArray qtType = waylandToQtType( a.type, a.interface, e.request == isServerSide() );
+        QByteArray qtType = waylandToQtType( a.type, a.interface, e.request == mServer );
         fprintf( f, "%s%s%s", qtType.constData(), qtType.endsWith( "&" ) || qtType.endsWith( "*" ) ? "" : " ", omitNames ? "" : a.name.constData() );
     }
     fprintf( f, ")" );
 }
 
 
-void Scanner::printEventHandlerSignature( FILE *f, const WaylandEvent& e, const char *interfaceName ) {
+void Wayland::Scribe::printEventHandlerSignature( FILE *f, const WaylandEvent& e, const char *interfaceName ) {
     fprintf( f, "handle%s( ", snakeCaseToCamelCase( e.name, true ).constData() );
 
-    if ( isServerSide() ) {
+    if ( mServer ) {
         fprintf( f, "::wl_client *, " );
         fprintf( f, "struct wl_resource *resource" );
     }
@@ -461,7 +309,7 @@ void Scanner::printEventHandlerSignature( FILE *f, const WaylandEvent& e, const 
 
         QByteArray argBA = snakeCaseToCamelCase( a.name, false );
 
-        if ( isServerSide() && isNewId ) {
+        if ( mServer && isNewId ) {
             fprintf( f, "uint32_t %s", argBA.constData() );
         }
         else {
@@ -473,7 +321,7 @@ void Scanner::printEventHandlerSignature( FILE *f, const WaylandEvent& e, const 
 }
 
 
-void Scanner::printEnums( FILE *f, const std::vector<WaylandEnum>& enums ) {
+void Wayland::Scribe::printEnums( FILE *f, const std::vector<WaylandEnum>& enums ) {
     for (const WaylandEnum& e : enums) {
         fprintf( f, "\n" );
         fprintf( f, "        enum class %s {\n", e.name.constData() );
@@ -491,9 +339,9 @@ void Scanner::printEnums( FILE *f, const std::vector<WaylandEnum>& enums ) {
 }
 
 
-QByteArray Scanner::stripInterfaceName( const QByteArray& name, bool capitalize ) {
-    if ( !m_prefix.isEmpty() && name.startsWith( m_prefix ) ) {
-        return snakeCaseToCamelCase( name, capitalize ).mid( m_prefix.size() );
+QByteArray Wayland::Scribe::stripInterfaceName( const QByteArray& name, bool capitalize ) {
+    if ( !mPrefix.isEmpty() && name.startsWith( mPrefix ) ) {
+        return snakeCaseToCamelCase( name.mid( mPrefix.size() ), capitalize );
     }
 
     if ( name.startsWith( "qt_" ) || name.startsWith( "wl_" ) ) {
@@ -504,17 +352,17 @@ QByteArray Scanner::stripInterfaceName( const QByteArray& name, bool capitalize 
 }
 
 
-bool Scanner::ignoreInterface( const QByteArray& name ) {
+bool Wayland::Scribe::ignoreInterface( const QByteArray& name ) {
     return name == "wl_display" ||
-           (isServerSide() && name == "wl_registry");
+           (mServer && name == "wl_registry");
 }
 
 
-bool Scanner::process() {
-    QFile file( m_protocolFilePath );
+bool Wayland::Scribe::process() {
+    QFile file( mProtocolFilePath );
 
     if ( !file.open( QIODevice::ReadOnly | QIODevice::Text ) ) {
-        fprintf( stderr, "Unable to open file %s\n", m_protocolFilePath.constData() );
+        fprintf( stderr, "Unable to open file %s\n", mProtocolFilePath.constData() );
         return false;
     }
 
@@ -529,9 +377,9 @@ bool Scanner::process() {
         return false;
     }
 
-    m_protocolName = byteArrayValue( *m_xml, "name" );
+    mProtocolName = byteArrayValue( *m_xml, "name" );
 
-    if ( m_protocolName.isEmpty() ) {
+    if ( mProtocolName.isEmpty() ) {
         m_xml->raiseError( QStringLiteral( "Missing protocol name." ) );
         return false;
     }
@@ -539,8 +387,8 @@ bool Scanner::process() {
     //We should convert - to _ so that the preprocessor wont generate code which will lead to unexpected
     // behavior
     //However, the wayland-scanner doesn't do so we will do the same for now
-    //QByteArray preProcessorProtocolName = QByteArray(m_protocolName).replace('-', '_').toUpper();
-    QByteArray preProcessorProtocolName = QByteArray( m_protocolName ).toUpper();
+    //QByteArray preProcessorProtocolName = QByteArray(mProtocolName).replace('-', '_').toUpper();
+    QByteArray preProcessorProtocolName = QByteArray( mProtocolName ).toUpper();
 
     std::vector<WaylandInterface> interfaces;
 
@@ -557,19 +405,19 @@ bool Scanner::process() {
         return false;
     }
 
-    auto headerPath = fs::path( QByteArray( m_protocolFilePath ).replace( ".xml", (mServer ? "-server.hpp" : "-client.hpp") ).constData() ).filename();
-    auto codePath   = fs::path( QByteArray( m_protocolFilePath ).replace( ".xml", (mServer ? "-server.cpp" : "-client.cpp") ).constData() ).filename();
+    auto headerPath = fs::path( QByteArray( mProtocolFilePath ).replace( ".xml", (mServer ? "-server.hpp" : "-client.hpp") ).constData() ).filename();
+    auto codePath   = fs::path( QByteArray( mProtocolFilePath ).replace( ".xml", (mServer ? "-server.cpp" : "-client.cpp") ).constData() ).filename();
 
     FILE *head = fopen( headerPath.string().c_str(), "w" );
     FILE *code = fopen( codePath.string().c_str(), "w" );
 
-    fprintf( head, "// This file was generated by wayland-scribe\n" );
-    fprintf( code, "// This file was generated by wayland-scribe\n" );
+    fprintf( head, "// This file was generated by %s " PROJECT_VERSION "\n", mScannerName.constData() );
+    fprintf( code, "// This file was generated by %s " PROJECT_VERSION "\n", mScannerName.constData() );
 
-    fprintf( head, "// source file is %s\n\n", qPrintable( m_protocolFilePath ) );
-    fprintf( code, "// source file is %s\n\n", qPrintable( m_protocolFilePath ) );
+    fprintf( head, "// Source: %s\n\n",                                      qPrintable( mProtocolFilePath ) );
+    fprintf( code, "// Source: %s\n\n",                                      qPrintable( mProtocolFilePath ) );
 
-    for (auto b : std::as_const( m_includes ) ) {
+    for (auto b : std::as_const( mIncludes ) ) {
         fprintf( head, "#include %s\n", b.constData() );
         fprintf( code, "#include %s\n", b.constData() );
     }
@@ -591,16 +439,16 @@ bool Scanner::process() {
 }
 
 
-void Scanner::generateServerHeader( FILE *head, std::vector<WaylandInterface> interfaces ) {
+void Wayland::Scribe::generateServerHeader( FILE *head, std::vector<WaylandInterface> interfaces ) {
     fprintf( head, "#pragma once\n" );
     fprintf( head, "\n" );
     fprintf( head, "#include \"wayland-server-core.h\"\n" );
 
-    if ( m_headerPath.isEmpty() ) {
-        fprintf( head, "#include \"%s.h\"\n\n", QByteArray( m_protocolName ).replace( '_', '-' ).constData() );
+    if ( mHeaderPath.isEmpty() ) {
+        fprintf( head, "#include \"%s.h\"\n\n", QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
     else {
-        fprintf( head, "#include <%s/%s.h>\n\n", m_headerPath.constData(), QByteArray( m_protocolName ).replace( '_', '-' ).constData() );
+        fprintf( head, "#include <%s/%s.h>\n\n", mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
 
     fprintf( head, "#include <iostream>\n" );
@@ -736,8 +584,8 @@ void Scanner::generateServerHeader( FILE *head, std::vector<WaylandInterface> in
 
         fprintf( head, "\n" );
         fprintf( head, "        std::multimap<struct ::wl_client*, Resource*> m_resource_map;\n" );
-        fprintf( head, "        Resource *m_resource;\n" );
-        fprintf( head, "        struct ::wl_global *m_global;\n" );
+        fprintf( head, "        Resource *m_resource = nullptr;\n" );
+        fprintf( head, "        struct ::wl_global *m_global = nullptr;\n" );
         fprintf( head, "        struct DisplayDestroyedListener : ::wl_listener {\n" );
         fprintf( head, "            %s *parent;\n", interfaceName );
         fprintf( head, "        };\n" );
@@ -751,14 +599,14 @@ void Scanner::generateServerHeader( FILE *head, std::vector<WaylandInterface> in
 }
 
 
-void Scanner::generateServerCode( FILE *code, std::vector<WaylandInterface> interfaces ) {
-    if ( m_headerPath.isEmpty() ) {
-        fprintf( code, "#include \"%s.h\"\n",   QByteArray( m_protocolName ).replace( '_', '-' ).constData() );
-        fprintf( code, "#include \"%s-server.hpp\"\n", QByteArray( m_protocolName ).replace( '_', '-' ).constData() );
+void Wayland::Scribe::generateServerCode( FILE *code, std::vector<WaylandInterface> interfaces ) {
+    if ( mHeaderPath.isEmpty() ) {
+        fprintf( code, "#include \"%s.h\"\n",          QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+        fprintf( code, "#include \"%s-server.hpp\"\n", QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
     else {
-        fprintf( code, "#include <%s/%s.h>\n",   m_headerPath.constData(), QByteArray( m_protocolName ).replace( '_', '-' ).constData() );
-        fprintf( code, "#include <%s/%s-server.hpp>\n", m_headerPath.constData(), QByteArray( m_protocolName ).replace( '_', '-' ).constData() );
+        fprintf( code, "#include <%s/%s.h>\n",          mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+        fprintf( code, "#include <%s/%s-server.hpp>\n", mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
 
     fprintf( code, "\n" );
@@ -1093,20 +941,18 @@ void Scanner::generateServerCode( FILE *code, std::vector<WaylandInterface> inte
 }
 
 
-void Scanner::generateClientHeader( FILE *head, std::vector<WaylandInterface> interfaces ) {
+void Wayland::Scribe::generateClientHeader( FILE *head, std::vector<WaylandInterface> interfaces ) {
     fprintf( head, "#pragma once\n" );
     fprintf( head, "\n" );
 
-    if ( m_headerPath.isEmpty() ) {
-        fprintf( head, "#include \"wayland-%s-client-protocol.h\"\n", QByteArray( m_protocolName ).replace( '_', '-' ).constData() );
-    }
-    else {
-        fprintf( head, "#include <%s/wayland-%s-client-protocol.h>\n", m_headerPath.constData(), QByteArray( m_protocolName ).replace( '_', '-' ).constData() );
+    if ( mHeaderPath.isEmpty() ) {
+        fprintf( head, "#include \"%s.h\"\n", QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
 
-    fprintf( head, "#include <QByteArray>\n" );
-    fprintf( head, "#include <QString>\n" );
-    fprintf( head, "\n" );
+    else {
+        fprintf( head, "#include <%s/%s.h>\n", mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+    }
+
     fprintf( head, "struct wl_registry;\n" );
     fprintf( head, "\n" );
 
@@ -1136,17 +982,17 @@ void Scanner::generateClientHeader( FILE *head, std::vector<WaylandInterface> in
                  clientExport.constData(), interfaceName );
         fprintf( head, "    public:\n" );
         fprintf( head, "        %s(struct ::wl_registry *registry, uint32_t id, int version);\n", interfaceName );
-        fprintf( head, "        %s(struct ::%s *object);\n",                                      interfaceName, interfaceName );
+        fprintf( head, "        %s(struct ::%s *object);\n",                                      interfaceName, interface.name.constData() );
         fprintf( head, "        %s();\n",                                                         interfaceName );
         fprintf( head, "\n" );
         fprintf( head, "        virtual ~%s();\n",                                                interfaceName );
         fprintf( head, "\n" );
         fprintf( head, "        void init(struct ::wl_registry *registry, uint32_t id, int version);\n" );
-        fprintf( head, "        void init(struct ::%s *object);\n",                               interfaceName );
+        fprintf( head, "        void init(struct ::%s *object);\n",                               interface.name.constData() );
         fprintf( head, "\n" );
-        fprintf( head, "        struct ::%s *object() { return m_%s; }\n",                        interfaceName, interfaceName );
-        fprintf( head, "        const struct ::%s *object() const { return m_%s; }\n",            interfaceName, interfaceName );
-        fprintf( head, "        static %s *fromObject(struct ::%s *object);\n",                   interfaceName, interfaceName );
+        fprintf( head, "        struct ::%s *object() { return m%s; }\n",                         interface.name.constData(), interfaceName );
+        fprintf( head, "        const struct ::%s *object() const { return m%s; }\n",             interface.name.constData(), interfaceName );
+        fprintf( head, "        static %s *fromObject(struct ::%s *object);\n",                   interfaceName,              interface.name.constData() );
         fprintf( head, "\n" );
         fprintf( head, "        bool isInitialized() const;\n" );
         fprintf( head, "\n" );
@@ -1194,7 +1040,7 @@ void Scanner::generateClientHeader( FILE *head, std::vector<WaylandInterface> in
 
         if ( hasEvents ) {
             fprintf( head, "        void init_listener();\n" );
-            fprintf( head, "        static const struct %s_listener m_%s_listener;\n", interfaceName, interfaceName );
+            fprintf( head, "        static const struct %s_listener m_%s_listener;\n", interface.name.constData(), interface.name.constData() );
             for (const WaylandEvent& e : interface.events) {
                 fprintf( head, "        static void " );
 
@@ -1203,7 +1049,7 @@ void Scanner::generateClientHeader( FILE *head, std::vector<WaylandInterface> in
             }
         }
 
-        fprintf( head, "        struct ::%s *m_%s;\n", interfaceName, interfaceName );
+        fprintf( head, "        struct ::%s *m_%s;\n", interface.name.constData(), interface.name.constData() );
         fprintf( head, "    };\n" );
     }
     fprintf( head, "}\n" );
@@ -1211,14 +1057,14 @@ void Scanner::generateClientHeader( FILE *head, std::vector<WaylandInterface> in
 }
 
 
-void Scanner::generateClientCode( FILE *code, std::vector<WaylandInterface> interfaces ) {
-    if ( m_headerPath.isEmpty() ) {
-        fprintf( code, "#include \"%s.h\"\n", QByteArray( m_protocolName ).replace( '_', '-' ).constData() );
-        fprintf( code, "#include \"%s-client.hpp\"\n", QByteArray( m_protocolName ).replace( '_', '-' ).constData() );
+void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterface> interfaces ) {
+    if ( mHeaderPath.isEmpty() ) {
+        fprintf( code, "#include \"%s.h\"\n",          QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+        fprintf( code, "#include \"%s-client.hpp\"\n", QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
     else {
-        fprintf( code, "#include <%s/%s.h>\n", m_headerPath.constData(), QByteArray( m_protocolName ).replace( '_', '-' ).constData() );
-        fprintf( code, "#include <%s/%s-client.hpp>\n", m_headerPath.constData(), QByteArray( m_protocolName ).replace( '_', '-' ).constData() );
+        fprintf( code, "#include <%s/%s.h>\n",          mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+        fprintf( code, "#include <%s/%s-client.hpp>\n", mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
 
     fprintf( code, "\n" );
@@ -1255,13 +1101,12 @@ void Scanner::generateClientCode( FILE *code, std::vector<WaylandInterface> inte
         bool hasEvents = !interface.events.empty();
 
         fprintf( code, "    %s::%s(struct ::wl_registry *registry, uint32_t id, int version) {\n", interfaceName, interfaceName );
-        fprintf( code, "    {\n" );
         fprintf( code, "        init(registry, id, version);\n" );
         fprintf( code, "    }\n" );
         fprintf( code, "\n" );
 
         fprintf( code, "    %s::%s(struct ::%s *obj)\n", interfaceName, interfaceName, interfaceName );
-        fprintf( code, "        : m_%s(obj) {\n",        interfaceName );
+        fprintf( code, "        : m%s(obj) {\n",         interfaceName );
 
         if ( hasEvents ) {
             fprintf( code, "        init_listener();\n" );
@@ -1270,8 +1115,8 @@ void Scanner::generateClientCode( FILE *code, std::vector<WaylandInterface> inte
         fprintf( code, "    }\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s::%s()\n",              interfaceName, interfaceName );
-        fprintf( code, "        : m_%s(nullptr) {\n", interfaceName );
+        fprintf( code, "    %s::%s()\n",             interfaceName, interfaceName );
+        fprintf( code, "        : m%s(nullptr) {\n", interfaceName );
         fprintf( code, "    }\n" );
         fprintf( code, "\n" );
 
@@ -1279,8 +1124,8 @@ void Scanner::generateClientCode( FILE *code, std::vector<WaylandInterface> inte
         fprintf( code, "    }\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    void %s::init(struct ::wl_registry *registry, uint32_t id, int version) {\n",                    interfaceName );
-        fprintf( code, "        m_%s = static_cast<struct ::%s *>(wlRegistryBind(registry, id, &%s_interface, version));\n", interfaceName, interfaceName, interfaceName );
+        fprintf( code, "    void %s::init(struct ::wl_registry *registry, uint32_t id, int version) {\n",                   interfaceName );
+        fprintf( code, "        m%s = static_cast<struct ::%s *>(wlRegistryBind(registry, id, &%s_interface, version));\n", interfaceName, interface.name.constData(), interface.name.constData() );
 
         if ( hasEvents ) {
             fprintf( code, "        init_listener();\n" );
@@ -1289,8 +1134,8 @@ void Scanner::generateClientCode( FILE *code, std::vector<WaylandInterface> inte
         fprintf( code, "    }\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    void %s::init(struct ::%s *obj) {\n", interfaceName, interfaceName );
-        fprintf( code, "        m_%s = obj;\n",                   interfaceName );
+        fprintf( code, "    void %s::init(struct ::%s *obj) {\n", interfaceName, interface.name.constData() );
+        fprintf( code, "        m%s = obj;\n",                    interfaceName );
 
         if ( hasEvents ) {
             fprintf( code, "        init_listener();\n" );
@@ -1299,30 +1144,28 @@ void Scanner::generateClientCode( FILE *code, std::vector<WaylandInterface> inte
         fprintf( code, "    }\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s *%s::fromObject(struct ::%s *object)\n", interfaceName, interfaceName,
-                 interfaceName );
+        fprintf( code, "    %s *%s::fromObject(struct ::%s *object)\n", interfaceName, interfaceName, interface.name.constData() );
         fprintf( code, "    {\n" );
 
         if ( hasEvents ) {
-            fprintf( code, "        if (wl_proxy_get_listener((struct ::wl_proxy *)object) != (void *)&m_%s_listener)\n", interfaceName );
+            fprintf( code, "        if (wl_proxy_get_listener((struct ::wl_proxy *)object) != (void *)&m_%s_listener)\n", interface.name.constData() );
             fprintf( code, "            return nullptr;\n" );
         }
 
-        fprintf( code, "        return static_cast<%s *>(%s_get_user_data(object));\n", interfaceName,
-                 interfaceName );
+        fprintf( code, "        return static_cast<%s *>(%s_get_user_data(object));\n", interfaceName, interface.name.constData() );
         fprintf( code, "    }\n" );
         fprintf( code, "\n" );
 
         fprintf( code, "    bool %s::isInitialized() const\n", interfaceName );
         fprintf( code, "    {\n" );
-        fprintf( code, "        return m_%s != nullptr;\n",    interfaceName );
+        fprintf( code, "        return m%s != nullptr;\n",     interfaceName );
         fprintf( code, "    }\n" );
         fprintf( code, "\n" );
 
         fprintf( code, "    uint32_t %s::version() const\n",
                  interfaceName );
         fprintf( code, "    {\n" );
-        fprintf( code, "        return wl_proxy_get_version(reinterpret_cast<wl_proxy*>(m_%s));\n",
+        fprintf( code, "        return wl_proxy_get_version(reinterpret_cast<wl_proxy*>(m%s));\n",
                  interfaceName );
         fprintf( code, "    }\n" );
         fprintf( code, "\n" );
@@ -1406,7 +1249,7 @@ void Scanner::generateClientCode( FILE *code, std::vector<WaylandInterface> inte
             fprintf( code, ");\n" );
 
             if ( e.type == "destructor" ) {
-                fprintf( code, "        m_%s = nullptr;\n", interfaceName );
+                fprintf( code, "        m%s = nullptr;\n", interfaceName );
             }
 
             fprintf( code, "    }\n" );
@@ -1455,10 +1298,9 @@ void Scanner::generateClientCode( FILE *code, std::vector<WaylandInterface> inte
             fprintf( code, "    };\n" );
             fprintf( code, "\n" );
 
-            fprintf( code, "    void %s::init_listener()\n",                         interfaceName );
+            fprintf( code, "    void %s::init_listener()\n",                        interfaceName );
             fprintf( code, "    {\n" );
-            fprintf( code, "        %s_add_listener(m_%s, &m_%s_listener, this);\n", interfaceName,
-                     interfaceName, interfaceName );
+            fprintf( code, "        %s_add_listener(m%s, &m_%s_listener, this);\n", interfaceName, interfaceName, interfaceName );
             fprintf( code, "    }\n" );
         }
     }
@@ -1467,26 +1309,8 @@ void Scanner::generateClientCode( FILE *code, std::vector<WaylandInterface> inte
 }
 
 
-void Scanner::printErrors() {
+void Wayland::Scribe::printErrors() {
     if ( m_xml->hasError() ) {
         fprintf( stderr, "XML error: %s\nLine %lld, column %lld\n", m_xml->errorString().toLocal8Bit().constData(), m_xml->lineNumber(), m_xml->columnNumber() );
     }
-}
-
-
-int main( int argc, char **argv ) {
-    QCoreApplication app( argc, argv );
-    Scanner          scanner;
-
-    if ( !scanner.parseArguments( argc, argv ) ) {
-        scanner.printUsage();
-        return EXIT_FAILURE;
-    }
-
-    if ( !scanner.process() ) {
-        scanner.printErrors();
-        return EXIT_FAILURE;
-    }
-
-    return EXIT_SUCCESS;
 }
