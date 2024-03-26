@@ -300,7 +300,7 @@ void Wayland::Scribe::printEventHandlerSignature( FILE *f, const WaylandEvent& e
 
     else {
         fprintf( f, "void *data, " );
-        fprintf( f, "struct ::%s *object", interfaceName );
+        fprintf( f, "struct ::%s *", interfaceName );
     }
 
     for (const WaylandArgument& a : e.arguments) {
@@ -312,6 +312,7 @@ void Wayland::Scribe::printEventHandlerSignature( FILE *f, const WaylandEvent& e
         if ( mServer && isNewId ) {
             fprintf( f, "uint32_t %s", argBA.constData() );
         }
+
         else {
             QByteArray cType = waylandToCType( a.type, a.interface );
             fprintf( f, "%s%s%s", cType.constData(), cType.endsWith( "*" ) ? "" : " ", argBA.constData() );
@@ -366,21 +367,21 @@ bool Wayland::Scribe::process() {
         return false;
     }
 
-    m_xml = new QXmlStreamReader( &file );
+    mXml = new QXmlStreamReader( &file );
 
-    if ( !m_xml->readNextStartElement() ) {
+    if ( !mXml->readNextStartElement() ) {
         return false;
     }
 
-    if ( m_xml->name() != u"protocol" ) {
-        m_xml->raiseError( QStringLiteral( "The file is not a wayland protocol file." ) );
+    if ( mXml->name() != u"protocol" ) {
+        mXml->raiseError( QStringLiteral( "The file is not a wayland protocol file." ) );
         return false;
     }
 
-    mProtocolName = byteArrayValue( *m_xml, "name" );
+    mProtocolName = byteArrayValue( *mXml, "name" );
 
     if ( mProtocolName.isEmpty() ) {
-        m_xml->raiseError( QStringLiteral( "Missing protocol name." ) );
+        mXml->raiseError( QStringLiteral( "Missing protocol name." ) );
         return false;
     }
 
@@ -392,16 +393,16 @@ bool Wayland::Scribe::process() {
 
     std::vector<WaylandInterface> interfaces;
 
-    while ( m_xml->readNextStartElement() ) {
-        if ( m_xml->name() == u"interface" ) {
-            interfaces.push_back( readInterface( *m_xml ) );
+    while ( mXml->readNextStartElement() ) {
+        if ( mXml->name() == u"interface" ) {
+            interfaces.push_back( readInterface( *mXml ) );
         }
         else {
-            m_xml->skipCurrentElement();
+            mXml->skipCurrentElement();
         }
     }
 
-    if ( m_xml->hasError() ) {
+    if ( mXml->hasError() ) {
         return false;
     }
 
@@ -946,11 +947,11 @@ void Wayland::Scribe::generateClientHeader( FILE *head, std::vector<WaylandInter
     fprintf( head, "\n" );
 
     if ( mHeaderPath.isEmpty() ) {
-        fprintf( head, "#include \"%s.h\"\n", QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+        fprintf( head, "#include \"%s-client.h\"\n", QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
 
     else {
-        fprintf( head, "#include <%s/%s.h>\n", mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+        fprintf( head, "#include <%s/%s-client.h>\n", mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
 
     fprintf( head, "struct wl_registry;\n" );
@@ -975,8 +976,6 @@ void Wayland::Scribe::generateClientHeader( FILE *head, std::vector<WaylandInter
 
         QByteArray interfaceNameBA         = snakeCaseToCamelCase( interface.name, true );
         const char *interfaceName          = interfaceNameBA.data();
-        QByteArray interfaceNameStrippedBA = stripInterfaceName( interface.name, false );
-        const char *interfaceNameStripped  = interfaceNameStrippedBA.data();
 
         fprintf( head, "    class %s %s\n    {\n",
                  clientExport.constData(), interfaceName );
@@ -990,8 +989,8 @@ void Wayland::Scribe::generateClientHeader( FILE *head, std::vector<WaylandInter
         fprintf( head, "        void init(struct ::wl_registry *registry, uint32_t id, int version);\n" );
         fprintf( head, "        void init(struct ::%s *object);\n",                               interface.name.constData() );
         fprintf( head, "\n" );
-        fprintf( head, "        struct ::%s *object() { return m%s; }\n",                         interface.name.constData(), interfaceName );
-        fprintf( head, "        const struct ::%s *object() const { return m%s; }\n",             interface.name.constData(), interfaceName );
+        fprintf( head, "        struct ::%s *object() { return m_%s; }\n",                         interface.name.constData(), interface.name.constData() );
+        fprintf( head, "        const struct ::%s *object() const { return m_%s; }\n",             interface.name.constData(), interface.name.constData() );
         fprintf( head, "        static %s *fromObject(struct ::%s *object);\n",                   interfaceName,              interface.name.constData() );
         fprintf( head, "\n" );
         fprintf( head, "        bool isInitialized() const;\n" );
@@ -1029,7 +1028,7 @@ void Wayland::Scribe::generateClientHeader( FILE *head, std::vector<WaylandInter
             fprintf( head, "\n" );
             fprintf( head, "    protected:\n" );
             for (const WaylandEvent& e : interface.events) {
-                fprintf( head, "        virtual void %s_", interfaceNameStripped );
+                fprintf( head, "        virtual void " );
                 printEvent( head, e );
                 fprintf( head, ";\n" );
             }
@@ -1044,7 +1043,7 @@ void Wayland::Scribe::generateClientHeader( FILE *head, std::vector<WaylandInter
             for (const WaylandEvent& e : interface.events) {
                 fprintf( head, "        static void " );
 
-                printEventHandlerSignature( head, e, interfaceName );
+                printEventHandlerSignature( head, e, interface.name.constData() );
                 fprintf( head, ";\n" );
             }
         }
@@ -1059,11 +1058,11 @@ void Wayland::Scribe::generateClientHeader( FILE *head, std::vector<WaylandInter
 
 void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterface> interfaces ) {
     if ( mHeaderPath.isEmpty() ) {
-        fprintf( code, "#include \"%s.h\"\n",          QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+        fprintf( code, "#include \"%s-client.h\"\n",          QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
         fprintf( code, "#include \"%s-client.hpp\"\n", QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
     else {
-        fprintf( code, "#include <%s/%s.h>\n",          mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
+        fprintf( code, "#include <%s/%s-client.h>\n",          mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
         fprintf( code, "#include <%s/%s-client.hpp>\n", mHeaderPath.constData(), QByteArray( mProtocolName ).replace( '_', '-' ).constData() );
     }
 
@@ -1074,11 +1073,11 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
 
     // wl_registry_bind is part of the protocol, so we can't use that... instead we use core
     // libwayland API to do the same thing a wayland-scanner generated wl_registry_bind would.
-    fprintf( code, "static inline void *wlRegistryBind(struct ::wl_registry *registry, uint32_t name, const struct ::wl_interface *interface, uint32_t version) {\n" );
-    fprintf( code, "    const uint32_t bindOpCode = 0;\n" );
-    fprintf( code, "    return (void *) wl_proxy_marshal_constructor_versioned((struct wl_proxy *) registry,\n" );
-    fprintf( code, "    bindOpCode, interface, version, name, interface->name, version, nullptr);\n" );
-    fprintf( code, "}\n" );
+    fprintf( code, "    static inline void *wlRegistryBind(struct ::wl_registry *registry, uint32_t name, const struct ::wl_interface *interface, uint32_t version) {\n" );
+    fprintf( code, "        const uint32_t bindOpCode = 0;\n" );
+    fprintf( code, "        return (void *) wl_proxy_marshal_constructor_versioned((struct wl_proxy *) registry, " );
+    fprintf( code, " bindOpCode, interface, version, name, interface->name, version, nullptr);\n" );
+    fprintf( code, "    }\n" );
     fprintf( code, "\n" );
 
     bool needsNewLine = false;
@@ -1095,8 +1094,6 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
 
         QByteArray interfaceNameBA         = snakeCaseToCamelCase( interface.name, true );
         const char *interfaceName          = interfaceNameBA.data();
-        QByteArray interfaceNameStrippedBA = stripInterfaceName( interface.name, false );
-        const char *interfaceNameStripped  = interfaceNameStrippedBA.data();
 
         bool hasEvents = !interface.events.empty();
 
@@ -1105,8 +1102,8 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
         fprintf( code, "    }\n" );
         fprintf( code, "\n" );
 
-        fprintf( code, "    %s::%s(struct ::%s *obj)\n", interfaceName, interfaceName, interfaceName );
-        fprintf( code, "        : m%s(obj) {\n",         interfaceName );
+        fprintf( code, "    %s::%s(struct ::%s *obj)\n", interfaceName, interfaceName, interface.name.constData() );
+        fprintf( code, "        : m_%s(obj) {\n",         interface.name.constData() );
 
         if ( hasEvents ) {
             fprintf( code, "        init_listener();\n" );
@@ -1116,7 +1113,7 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
         fprintf( code, "\n" );
 
         fprintf( code, "    %s::%s()\n",             interfaceName, interfaceName );
-        fprintf( code, "        : m%s(nullptr) {\n", interfaceName );
+        fprintf( code, "        : m_%s(nullptr) {\n", interface.name.constData() );
         fprintf( code, "    }\n" );
         fprintf( code, "\n" );
 
@@ -1125,7 +1122,7 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
         fprintf( code, "\n" );
 
         fprintf( code, "    void %s::init(struct ::wl_registry *registry, uint32_t id, int version) {\n",                   interfaceName );
-        fprintf( code, "        m%s = static_cast<struct ::%s *>(wlRegistryBind(registry, id, &%s_interface, version));\n", interfaceName, interface.name.constData(), interface.name.constData() );
+        fprintf( code, "        m_%s = static_cast<struct ::%s *>(wlRegistryBind(registry, id, &%s_interface, version));\n", interface.name.constData(), interface.name.constData(), interface.name.constData() );
 
         if ( hasEvents ) {
             fprintf( code, "        init_listener();\n" );
@@ -1135,7 +1132,7 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
         fprintf( code, "\n" );
 
         fprintf( code, "    void %s::init(struct ::%s *obj) {\n", interfaceName, interface.name.constData() );
-        fprintf( code, "        m%s = obj;\n",                    interfaceName );
+        fprintf( code, "        m_%s = obj;\n",                    interface.name.constData() );
 
         if ( hasEvents ) {
             fprintf( code, "        init_listener();\n" );
@@ -1158,21 +1155,20 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
 
         fprintf( code, "    bool %s::isInitialized() const\n", interfaceName );
         fprintf( code, "    {\n" );
-        fprintf( code, "        return m%s != nullptr;\n",     interfaceName );
+        fprintf( code, "        return m_%s != nullptr;\n",     interface.name.constData() );
         fprintf( code, "    }\n" );
         fprintf( code, "\n" );
 
         fprintf( code, "    uint32_t %s::version() const\n",
                  interfaceName );
         fprintf( code, "    {\n" );
-        fprintf( code, "        return wl_proxy_get_version(reinterpret_cast<wl_proxy*>(m%s));\n",
-                 interfaceName );
+        fprintf( code, "        return wl_proxy_get_version(reinterpret_cast<wl_proxy*>(m_%s));\n", interface.name.constData() );
         fprintf( code, "    }\n" );
         fprintf( code, "\n" );
 
         fprintf( code, "    const struct wl_interface *%s::interface()\n", interfaceName );
         fprintf( code, "    {\n" );
-        fprintf( code, "        return &::%s_interface;\n",                interfaceName );
+        fprintf( code, "        return &::%s_interface;\n",                interface.name.constData() );
         fprintf( code, "    }\n" );
 
         for (const WaylandEvent& e : interface.requests) {
@@ -1208,8 +1204,8 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
                 fprintf( code, "\n" );
             }
             int actualArgumentCount = new_id ? int(e.arguments.size() ) - 1 : int(e.arguments.size() );
-            fprintf( code, "        %s::%s_%s(\n", new_id ? "return " : "", interfaceName, e.name.constData() );
-            fprintf( code, "            m_%s%s",   interfaceName,           actualArgumentCount > 0 ? "," : "" );
+            fprintf( code, "        %s::%s_%s(\n", new_id ? "return " : "", interface.name.constData(), e.name.constData() );
+            fprintf( code, "            m_%s%s",   interface.name.constData(),           actualArgumentCount > 0 ? "," : "" );
             bool needsComma = false;
             for (const WaylandArgument& a : e.arguments) {
                 bool isNewId = a.type == "new_id";
@@ -1249,7 +1245,7 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
             fprintf( code, ");\n" );
 
             if ( e.type == "destructor" ) {
-                fprintf( code, "        m%s = nullptr;\n", interfaceName );
+                fprintf( code, "        m_%s = nullptr;\n", interface.name.constData() );
             }
 
             fprintf( code, "    }\n" );
@@ -1258,31 +1254,30 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
         if ( hasEvents ) {
             fprintf( code, "\n" );
             for (const WaylandEvent& e : interface.events) {
-                fprintf( code, "    void %s::%s_", interfaceName, interfaceNameStripped );
+                fprintf( code, "    void %s::", interfaceName );
                 printEvent( code, e, true );
                 fprintf( code, "\n" );
                 fprintf( code, "    {\n" );
                 fprintf( code, "    }\n" );
                 fprintf( code, "\n" );
                 fprintf( code, "    void %s::", interfaceName );
-                printEventHandlerSignature( code, e, interfaceName );
+                printEventHandlerSignature( code, e, interface.name.constData() );
                 fprintf( code, " {\n" );
-                fprintf( code, "        static_cast<%s *>(data)->%s_%s(", interfaceName, interfaceNameStripped, e.name.constData() );
+                fprintf( code, "        static_cast<%s *>(data)->%s(", interfaceName, snakeCaseToCamelCase( e.name.constData(), false ).constData() );
                 bool needsComma = false;
                 for (const WaylandArgument& a : e.arguments) {
                     if ( needsComma ) {
-                        fprintf( code, "," );
+                        fprintf( code, ", " );
                     }
 
                     needsComma = true;
-                    fprintf( code, "\n" );
                     const char *argumentName = a.name.constData();
 
                     if ( a.type == "string" ) {
-                        fprintf( code, "            QString::fromUtf8(%s)", argumentName );
+                        fprintf( code, "QString::fromUtf8(%s)", snakeCaseToCamelCase( argumentName, false ).constData() );
                     }
                     else {
-                        fprintf( code, "            %s", argumentName );
+                        fprintf( code, "%s", snakeCaseToCamelCase( argumentName, false ).constData() );
                     }
                 }
                 fprintf( code, ");\n" );
@@ -1290,17 +1285,16 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
                 fprintf( code, "    }\n" );
                 fprintf( code, "\n" );
             }
-            fprintf( code, "    const struct %s_listener %s::m_%s_listener = {\n", interfaceName,
-                     interfaceName, interfaceName );
+            fprintf( code, "    const struct %s_listener %s::m_%s_listener = {\n", interface.name.constData(), interfaceName, interface.name.constData() );
             for (const WaylandEvent& e : interface.events) {
-                fprintf( code, "        %s::%s,\n", interfaceName, e.name.constData() );
+                fprintf( code, "        %s::handle%s,\n", interfaceName, snakeCaseToCamelCase( e.name.constData(), true ).constData() );
             }
             fprintf( code, "    };\n" );
             fprintf( code, "\n" );
 
             fprintf( code, "    void %s::init_listener()\n",                        interfaceName );
             fprintf( code, "    {\n" );
-            fprintf( code, "        %s_add_listener(m%s, &m_%s_listener, this);\n", interfaceName, interfaceName, interfaceName );
+            fprintf( code, "        %s_add_listener(m_%s, &m_%s_listener, this);\n", interface.name.constData(), interface.name.constData(), interface.name.constData() );
             fprintf( code, "    }\n" );
         }
     }
@@ -1310,7 +1304,7 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
 
 
 void Wayland::Scribe::printErrors() {
-    if ( m_xml->hasError() ) {
-        fprintf( stderr, "XML error: %s\nLine %lld, column %lld\n", m_xml->errorString().toLocal8Bit().constData(), m_xml->lineNumber(), m_xml->columnNumber() );
+    if ( mXml->hasError() ) {
+        fprintf( stderr, "XML error: %s\nLine %lld, column %lld\n", mXml->errorString().toLocal8Bit().constData(), mXml->lineNumber(), mXml->columnNumber() );
     }
 }

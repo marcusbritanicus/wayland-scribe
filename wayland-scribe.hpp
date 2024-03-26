@@ -39,7 +39,7 @@ namespace Wayland {
 class Wayland::Scribe {
     public:
         explicit Scribe();
-        ~Scribe() { delete m_xml; }
+        ~Scribe() { delete mXml; }
 
         bool process();
         void printErrors();
@@ -116,5 +116,5 @@ class Wayland::Scribe {
         QByteArray mHeaderPath;
         QByteArray mPrefix;
         QList<QByteArray> mIncludes;
-        QXmlStreamReader *m_xml = nullptr;
+        QXmlStreamReader *mXml = nullptr;
 };
