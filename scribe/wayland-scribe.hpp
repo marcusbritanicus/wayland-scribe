@@ -8,9 +8,14 @@
  * All bug reports are to be filed against this project and not the
  * original authors.
  *
+ * Original license:
+ * Copyright (C) 2016 The Qt Company Ltd.
+ * SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only
+ * OR GPL-2.0-only OR GPL-3.0-only
+ *
  * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License.
+ * it under the terms of the GNU General Public License, version 3 as
+ * published by the Free Software Foundation.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,6 +27,7 @@
  * https://www.gnu.org/licenses/gpl-3.0.html#license-text
  **/
 
+#pragma once
 
 #include <QCoreApplication>
 #include <QFile>
@@ -44,7 +50,7 @@ class Wayland::Scribe {
         bool process();
         void printErrors();
 
-        void setRunMode( QString specFile, bool isServer );
+        void setRunMode( QString specFile, bool isServer, uint file, QString output );
         void setArgs( QString headerPath, QString prefix, QStringList includes );
 
     private:
@@ -108,13 +114,22 @@ class Wayland::Scribe {
         bool ignoreInterface( const QByteArray& name );
 
         bool mServer = false;
-        bool mClient = false;
+
+        /**
+         * File(s) to be generated
+         * 0: both source and header
+         * 1: source
+         * 2: header
+         */
+        uint mFile = 0;
 
         QByteArray mProtocolName;
         QByteArray mProtocolFilePath;
         QByteArray mScannerName;
         QByteArray mHeaderPath;
         QByteArray mPrefix;
+        QString mOutputSrcPath;
+        QString mOutputHdrPath;
         QList<QByteArray> mIncludes;
         QXmlStreamReader *mXml = nullptr;
 };

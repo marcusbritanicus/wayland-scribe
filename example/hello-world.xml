@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="hello_world">
+
+  <copyright>
+    This is a dummy Wayland protocol for demonstration purposes only.
+  </copyright>
+
+  <interface name="greeter" version="1">
+    <description summary="Simple hello world interface">
+      This interface defines a request and an event for a basic hello world interaction.
+    </description>
+
+    <request name="say_hello">
+      <description summary="Sends a hello message to the server">
+        This request asks the server to respond with a hello event.
+      </description>
+      <arg name="name" type="string" summary="name of the person to be greeted"/>
+    </request>
+
+    <event name="hello">
+      <description summary="Server responds with a hello message">
+        This event is sent by the server in response to the say_hello request.
+      </description>
+      <arg name="greeting" type="string"/>
+    </event>
+  </interface>
+
+</protocol>

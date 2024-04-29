@@ -1,5 +1,6 @@
 project(
 	'wayland-scribe',
+	'c',
 	'cpp',
 	version: '1.0.0',
 	license: 'GPLv3',
@@ -21,8 +22,8 @@ endif
 
 executable(
 	'wayland-scribe', [
-		'main.cpp',
-		'wayland-scribe.cpp' 
+		'scribe/main.cpp',
+		'scribe/wayland-scribe.cpp'
 	],
 	dependencies: QtDeps,
 	install: true
