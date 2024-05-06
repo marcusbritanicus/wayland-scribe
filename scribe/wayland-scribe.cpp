@@ -494,8 +494,6 @@ bool Wayland::Scribe::process() {
     std::string headerPath;
     std::string codePath;
 
-    qDebug() << mOutputHdrPath << mOutputSrcPath;
-
     if ( mFile == 0 ) {
         headerPath = QFileInfo( mOutputHdrPath.arg( mServer ? "-server" : "-client" ) ).absoluteFilePath().toStdString();
         codePath   = QFileInfo( mOutputSrcPath.arg( mServer ? "-server" : "-client" ) ).absoluteFilePath().toStdString();
@@ -505,8 +503,6 @@ bool Wayland::Scribe::process() {
         headerPath = QFileInfo( mOutputHdrPath ).absoluteFilePath().toStdString();
         codePath   = QFileInfo( mOutputSrcPath ).absoluteFilePath().toStdString();
     }
-
-    std::cout << headerPath << std::endl;
 
     if ( mServer ) {
         if ( (mFile == 0) || (mFile == 2) ) {
