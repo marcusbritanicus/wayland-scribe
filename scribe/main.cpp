@@ -23,27 +23,25 @@
  **/
 
 
-
-#include <QCoreApplication>
-#include <QCommandLineParser>
 #include <iostream>
 
 #include "wayland-scribe.hpp"
+#include "cxxopts.hpp"
 
-void printHelpText() {
-    std::cout << "Wayland::Scribe " << PROJECT_VERSION << std::endl << std::endl;
+void printHelpText( bool err ) {
+    ( err ? std::cerr : std::cout ) << "Wayland::Scribe " << PROJECT_VERSION << std::endl << std::endl;
 
-    std::cout << "Usage:" << std::endl;
-    std::cout << "  wayland-scribe --[server|client] specfile [options] --[source|header] output" << std::endl << std::endl;
+    ( err ? std::cerr : std::cout ) << "Usage:" << std::endl;
+    ( err ? std::cerr : std::cout ) << "  wayland-scribe --[server|client] specfile [options] --[source|header] output" << std::endl << std::endl;
 
-    std::cout << "Options:" << std::endl;
-    std::cout << "  --header-path <path>      Path to the c header of this protocol (optional)." << std::endl;
-    std::cout << "  --prefix <prefix>         Prefix of interfaces (to be stripped; optional)." << std::endl;
-    std::cout << "  --add-include <include>   Add extra include path (can speficy multiple times; optional)." << std::endl << std::endl;
+    ( err ? std::cerr : std::cout ) << "Options:" << std::endl;
+    ( err ? std::cerr : std::cout ) << "  --header-path <path>      Path to the c header of this protocol (optional)." << std::endl;
+    ( err ? std::cerr : std::cout ) << "  --prefix <prefix>         Prefix of interfaces (to be stripped; optional)." << std::endl;
+    ( err ? std::cerr : std::cout ) << "  --add-include <include>   Add extra include path (can speficy multiple times; optional)." << std::endl << std::endl;
 
-    std::cout << "Other options:" << std::endl;
-    std::cout << "  -h|--help                 Print this help text and exit." << std::endl;
-    std::cout << "  -v|--version              Print version information and exit." << std::endl;
+    ( err ? std::cerr : std::cout ) << "Other options:" << std::endl;
+    ( err ? std::cerr : std::cout ) << "  -h|--help                 Print this help text and exit." << std::endl;
+    ( err ? std::cerr : std::cout ) << "  -v|--version              Print version information and exit." << std::endl;
 }
 
 
@@ -53,68 +51,58 @@ void printVersion() {
 
 
 int main( int argc, char **argv ) {
-    QCoreApplication app( argc, argv );
+    cxxopts::Options options( "Wayland::Scribe", "A simple program to generate C++ code from Wayland protocol XML spec." );
 
-    QCommandLineParser parser;
+    options.add_options()
+    ( "h,help", "Print this help" )
+    ( "v,version", "Print application version and exit" )
+    ( "s,server", "Generate the server-side wrapper code for the given protocol.", cxxopts::value<std::string> () )
+    ( "c,client", "Generate the client-side wrapper code for the given protocol.", cxxopts::value<std::string> () )
+    ( "source", "Generate the header code for the given protocol." )
+    ( "header", "Generate the source code for the given protocol." )
+    ( "header-path", "Path to the c header of this protocol (optional).", cxxopts::value<std::string> () )
+    ( "prefix", "Prefix of interfaces (to be stripped; optional).", cxxopts::value<std::string> () )
+    ( "add-include", "Additional include paths", cxxopts::value<std::vector<std::string> > () )
+    ( "output", "N", cxxopts::value<std::vector<std::string> > () );
 
-    parser.addOption( { "server", "Generate the server-side wrapper code for the given protocol.", "spec-file" } );
-    parser.addOption( { "client", "Generate the client-side wrapper code for the given protocol.", "spec-file" } );
-    parser.addOption( { "source", "Generate the header code for the given protocol." } );
-    parser.addOption( { "header", "Generate the source code for the given protocol." } );
-    parser.addOption( { "header-path", "Path to the c header of this protocol (optional).", "path" } );
-    parser.addOption( { "prefix", "Prefix of interfaces (to be stripped; optional).", "prefix" } );
-    parser.addOption( { "add-include", "Add extra include path (can speficy multiple times; optional).", "include" } );
+    options.parse_positional( { "output" } );
 
-    /** Help and version */
-    parser.addOption( { { "h", "help" }, "Print this help" } );
-    parser.addOption( { { "v", "version" }, "Print application version and exit" } );
-
-    parser.addPositionalArgument( "output", "Name of the output file to be generated." );
-
-    /** Process the CLI arguments */
-    parser.process( app );
+    auto result = options.parse( argc, argv );
 
     /** == Help and Version == **/
-    if ( parser.isSet( "help" ) ) {
-        printHelpText();
-
+    if ( result.count( "help" ) ) {
+        printHelpText( false );
         return 0;
     }
 
-    if ( parser.isSet( "version" ) ) {
+    if ( result.count( "version" ) ) {
         printVersion();
-
         return 0;
     }
 
-    if ( parser.isSet( "server" ) && parser.isSet( "client" ) ) {
-        std::cerr << "[Error]: Please specify only one of --server|--client" << std::endl << std::endl;
-        printHelpText();
+    /** == Server and Client == **/
+    if ( result.count( "server" ) == result.count( "client" ) ) {
+        std::cerr << "[Error]: Please specify one of --server or --client" << std::endl << std::endl;
+        printHelpText( true );
 
         return EXIT_FAILURE;
     }
 
-    if ( (parser.isSet( "server" ) == false) && (parser.isSet( "client" ) == false) ) {
-        std::cerr << "[Error]: Please specify either --server or --client" << std::endl << std::endl;
-        printHelpText();
+    // if ( ( strcmp( argv[ 1 ], "--server" ) != 0 ) && ( strcmp( argv[ 1 ], "--client" ) != 0 ) ) {
+    //     std::cerr << "[Error]: The first argument should be --server or --client" << std::endl <<
+    // std::endl;
+    //     printHelpText();
 
-        return EXIT_FAILURE;
-    }
+    //     return EXIT_FAILURE;
+    // }
 
-    if ( (strcmp( argv[ 1 ], "--server" ) != 0) && (strcmp( argv[ 1 ], "--client" ) != 0) ) {
-        std::cerr << "[Error]: The first argument should be --server or --client" << std::endl << std::endl;
-        printHelpText();
+    if ( result.count( "output" ) != 1 ) {
+        std::vector<std::string> posArgs = result[ "output" ].as<std::vector<std::string> >();
 
-        return EXIT_FAILURE;
-    }
+        std::cerr << "[Warning]: Ignoring the extra argument" << ( posArgs.size() == 1 ? ": (" : "s: (" );
 
-    if ( parser.positionalArguments().length() && (parser.positionalArguments().length() != 1) ) {
-        QStringList posArgs = parser.positionalArguments();
-
-        std::cerr << "[Warning]: Ignoring the extra argument" << (posArgs.length() == 1 ? ": (" : "s: (");
-
-        for ( int i = 1; i < posArgs.length(); i++ ) {
-            std::cerr << posArgs.at( i ).toStdString() << (i == posArgs.length() - 1 ? ")" : " ");
+        for ( size_t i = 1; i < posArgs.size(); i++ ) {
+            std::cerr << posArgs.at( i ) << ( i == posArgs.size() - 1 ? ")" : " " );
         }
 
         std::cerr << std::endl << std::endl;
@@ -126,36 +114,38 @@ int main( int argc, char **argv ) {
     Wayland::Scribe scribe;
 
     /** Get the spec file */
-    QString specFile;
+    std::string specFile;
 
-    if ( parser.isSet( "server" ) ) {
-        specFile = parser.value( "server" );
+    if ( result.count( "server" ) ) {
+        specFile = result[ "server" ].as<std::string>();
     }
 
-    else if ( parser.isSet( "client" ) ) {
-        specFile = parser.value( "client" );
+    else if ( result.count( "client" ) ) {
+        specFile = result[ "client" ].as<std::string>();
     }
 
     // /** Ensure that that file exists */
-    if ( QFile::exists( specFile ) == false ) {
-        std::cerr << "[Error]: Unable to locate the file" << specFile.toUtf8().constData();
+    if ( fs::exists( specFile ) == false ) {
+        std::cerr << "[Error]: Unable to locate the file" << specFile.c_str();
         return EXIT_FAILURE;
     }
 
     /** Get the files to be generated */
-    uint file = (parser.isSet( "source" ) ? (parser.isSet( "header" ) ? 0 : 1) : (parser.isSet( "header" ) ? 2 : 0) );
+    uint file = ( result.count( "source" ) ? ( result.count( "header" ) ? 0 : 1 ) : ( result.count( "header" ) ? 2 : 0 ) );
 
     /** Set the output file name, if specified */
-    QString output = (parser.positionalArguments().count() ? parser.positionalArguments().at( 0 ) : "");
+    std::vector<std::string> posArgs = result[ "output" ].as<std::vector<std::string> >();
+    std::string              output  = ( posArgs.size() ? posArgs.at( 0 ) : "" );
 
     /** Set the main running mode */
-    scribe.setRunMode( specFile, parser.isSet( "server" ), file, output );
+    scribe.setRunMode( specFile, result.count( "server" ), file, output );
 
     /** Update other arguments */
-    scribe.setArgs( parser.value( "header-path" ), parser.value( "prefix" ), parser.values( "add-include" ) );
+    scribe.setArgs( result[ "header-path" ].as<std::string>(), result[ "prefix" ].as<std::string>(), result[ "add-include" ].as<std::vector<std::string> >() );
 
     if ( !scribe.process() ) {
-        scribe.printErrors();
+        // scribe.printErrors();
+        std::cerr << "Errors encountered while parsing the xml file" << std::endl << std::endl;
         return EXIT_FAILURE;
     }
 

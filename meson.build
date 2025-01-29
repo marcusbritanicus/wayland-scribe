@@ -15,16 +15,13 @@ project(
 add_global_arguments( '-DPROJECT_VERSION="v@0@"'.format( meson.project_version() ), language : 'cpp' )
 add_project_link_arguments(['-rdynamic'], language:'cpp')
 
-QtDeps = dependency( 'qt6', modules: [ 'Core' ], required: false )
-if QtDeps.found() == false
-	QtDeps = dependency( 'qt5', modules: [ 'Core' ], required: true )
-endif
+XML = dependency( 'pugixml' )
 
 executable(
 	'wayland-scribe', [
 		'scribe/main.cpp',
 		'scribe/wayland-scribe.cpp'
 	],
-	dependencies: QtDeps,
+	dependencies: XML,
 	install: true
 )

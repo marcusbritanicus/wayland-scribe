@@ -29,12 +29,10 @@
 
 #pragma once
 
-#include <QCoreApplication>
-#include <QFile>
-#include <QXmlStreamReader>
-
 #include <vector>
 #include <filesystem>
+
+#include <pugixml.hpp>
 
 namespace fs = std::filesystem;
 
@@ -45,44 +43,42 @@ namespace Wayland {
 class Wayland::Scribe {
     public:
         explicit Scribe();
-        ~Scribe() { delete mXml; }
+        ~Scribe() = default;
 
         bool process();
-        void printErrors();
 
-        void setRunMode( QString specFile, bool isServer, uint file, QString output );
-        void setArgs( QString headerPath, QString prefix, QStringList includes );
+        void setRunMode( const std::string& specFile, bool server, uint file, const std::string& output );
+        void setArgs( const std::string& headerPath, const std::string& prefix, const std::vector<std::string>& includes );
 
     private:
         struct WaylandEnumEntry {
-            QByteArray name;
-            QByteArray value;
-            QByteArray summary;
+            std::string name;
+            std::string value;
+            std::string summary;
         };
 
         struct WaylandEnum {
-            QByteArray                    name;
-
+            std::string                   name;
             std::vector<WaylandEnumEntry> entries;
         };
 
         struct WaylandArgument {
-            QByteArray name;
-            QByteArray type;
-            QByteArray interface;
-            QByteArray summary;
-            bool       allowNull;
+            std::string name;
+            std::string type;
+            std::string interface;
+            std::string summary;
+            bool        allowNull;
         };
 
         struct WaylandEvent {
             bool                         request;
-            QByteArray                   name;
-            QByteArray                   type;
+            std::string                  name;
+            std::string                  type;
             std::vector<WaylandArgument> arguments;
         };
 
         struct WaylandInterface {
-            QByteArray                name;
+            std::string               name;
             int                       version;
 
             std::vector<WaylandEnum>  enums;
@@ -96,22 +92,18 @@ class Wayland::Scribe {
         void generateClientHeader( FILE *head, std::vector<WaylandInterface> interfaces );
         void generateClientCode( FILE *head, std::vector<WaylandInterface> interfaces );
 
-        QByteArray byteArrayValue( const QXmlStreamReader& xml, const char *name );
-        int intValue( const QXmlStreamReader& xml, const char *name, int defaultValue = 0 );
-        bool boolValue( const QXmlStreamReader& xml, const char *name );
-        WaylandEvent readEvent( QXmlStreamReader& xml, bool request );
-        Scribe::WaylandEnum readEnum( QXmlStreamReader& xml );
-        Scribe::WaylandInterface readInterface( QXmlStreamReader& xml );
-        QByteArray waylandToCType( const QByteArray& waylandType, const QByteArray& interface );
-        QByteArray waylandToQtType( const QByteArray& waylandType, const QByteArray& interface, bool cStyleArray );
+        WaylandEvent readEvent( pugi::xml_node& xml, bool request );
+        Scribe::WaylandEnum readEnum( pugi::xml_node& xml );
+        Scribe::WaylandInterface readInterface( pugi::xml_node& xml );
+        std::string waylandToCType( const std::string& waylandType, const std::string& interface );
         const Scribe::WaylandArgument *newIdArgument( const std::vector<WaylandArgument>& arguments );
 
         void printEvent( FILE *f, const WaylandEvent& e, bool omitNames = false, bool withResource = false, bool capitalize = false );
         void printEventHandlerSignature( FILE *f, const WaylandEvent& e, const char *interfaceName );
         void printEnums( FILE *f, const std::vector<WaylandEnum>& enums );
 
-        QByteArray stripInterfaceName( const QByteArray& name, bool );
-        bool ignoreInterface( const QByteArray& name );
+        std::string stripInterfaceName( const std::string& name, bool );
+        bool ignoreInterface( const std::string& name );
 
         bool mServer = false;
 
@@ -123,13 +115,12 @@ class Wayland::Scribe {
          */
         uint mFile = 0;
 
-        QByteArray mProtocolName;
-        QByteArray mProtocolFilePath;
-        QByteArray mScannerName;
-        QByteArray mHeaderPath;
-        QByteArray mPrefix;
-        QString mOutputSrcPath;
-        QString mOutputHdrPath;
-        QList<QByteArray> mIncludes;
-        QXmlStreamReader *mXml = nullptr;
+        std::string mProtocolName;
+        std::string mProtocolFilePath;
+        std::string mScannerName;
+        std::string mHeaderPath;
+        std::string mPrefix;
+        std::string mOutputSrcPath;
+        std::string mOutputHdrPath;
+        std::vector<std::string> mIncludes;
 };
