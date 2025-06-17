@@ -137,8 +137,8 @@ void Wayland::Scribe::setRunMode( const std::string& specFile, bool server, uint
 
     switch ( mFile ) {
         case 0: {
-            mOutputSrcPath = ( tempOutput + "%1.cpp" );
-            mOutputHdrPath = ( tempOutput + "%1.hpp" );
+            mOutputSrcPath = ( tempOutput + ".cpp" );
+            mOutputHdrPath = ( tempOutput + ".hpp" );
 
             break;
         }
@@ -147,11 +147,14 @@ void Wayland::Scribe::setRunMode( const std::string& specFile, bool server, uint
             /** No source suffix: add it! */
             if ( hasSuffix( tempOutput, 'c' ) == false ) {
                 mOutputSrcPath = tempOutput + ".cpp";
+                mOutputHdrPath = tempOutput + ".hpp";
             }
 
             /** Has source suffix: do nothing */
             else {
                 mOutputSrcPath = tempOutput;
+                mOutputHdrPath = replace( tempOutput, ".cpp", ".hpp" );
+                mOutputHdrPath = replace( tempOutput, ".cc", ".hh" );
             }
 
             break;
@@ -160,12 +163,16 @@ void Wayland::Scribe::setRunMode( const std::string& specFile, bool server, uint
         case 2: {
             /** No header suffix: add it! */
             if ( hasSuffix( tempOutput, 'h' ) == false ) {
+                mOutputSrcPath = tempOutput + ".cpp";
                 mOutputHdrPath = tempOutput + ".hpp";
             }
 
             /** Has header suffix: do nothing */
             else {
                 mOutputHdrPath = tempOutput;
+                mOutputSrcPath = replace( tempOutput, ".h", ".cpp" );
+                mOutputSrcPath = replace( tempOutput, ".hh", ".cc" );
+                mOutputSrcPath = replace( tempOutput, ".hpp", ".cpp" );
             }
 
             break;
@@ -486,25 +493,14 @@ bool Wayland::Scribe::process() {
             fprintf( f, "#include <string>\n" );
         };
 
-    std::string headerPath;
-    std::string codePath;
-
-    if ( mFile == 0 ) {
-        headerPath = fs::absolute( replace( mOutputHdrPath, "%1", mServer ? "-server" : "-client" ) ).string();
-        codePath   = fs::absolute( replace( mOutputSrcPath, "%1", mServer ? "-server" : "-client" ) ).string();
-    }
-
-    else {
-        headerPath = fs::absolute( mOutputHdrPath ).string();
-        codePath   = fs::absolute( mOutputSrcPath ).string();
-    }
+    std::string headerPath = fs::absolute( mOutputHdrPath ).string();
+    std::string codePath   = fs::absolute( mOutputSrcPath ).string();
 
     if ( mServer ) {
         if ( ( mFile == 0 ) || ( mFile == 2 ) ) {
             FILE *head = fopen( headerPath.c_str(), "w" );
 
             writeHeader( head, mScannerName, mProtocolFilePath, mIncludes, true );
-
             generateServerHeader( head, interfaces );
             fclose( head );
         }
@@ -701,11 +697,11 @@ void Wayland::Scribe::generateServerHeader( FILE *head, std::vector<WaylandInter
 void Wayland::Scribe::generateServerCode( FILE *code, std::vector<WaylandInterface> interfaces ) {
     if ( mHeaderPath.empty() ) {
         fprintf( code, "#include \"%s-server.h\"\n",   replace( mProtocolName, "_", "-" ).c_str() );
-        fprintf( code, "#include \"%s-server.hpp\"\n", replace( mProtocolName, "_", "-" ).c_str() );
+        fprintf( code, "#include \"%s\"\n", mOutputHdrPath.c_str() );
     }
     else {
-        fprintf( code, "#include <%s/%s-server.h>\n",   mHeaderPath.c_str(), replace( mProtocolName, "_", "-" ).c_str() );
-        fprintf( code, "#include <%s/%s-server.hpp>\n", mHeaderPath.c_str(), replace( mProtocolName, "_", "-" ).c_str() );
+        fprintf( code, "#include \"%s/%s-server.h\"\n",   mHeaderPath.c_str(), replace( mProtocolName, "_", "-" ).c_str() );
+        fprintf( code, "#include \"%s/%s\"\n", mHeaderPath.c_str(), mOutputHdrPath.c_str() );
     }
 
     fprintf( code, "\n" );
@@ -1134,11 +1130,11 @@ void Wayland::Scribe::generateClientHeader( FILE *head, std::vector<WaylandInter
 void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterface> interfaces ) {
     if ( mHeaderPath.empty() ) {
         fprintf( code, "#include \"%s-client.h\"\n",   replace( mProtocolName, "_", "-" ).c_str() );
-        fprintf( code, "#include \"%s-client.hpp\"\n", replace( mProtocolName, "_", "-" ).c_str() );
+        fprintf( code, "#include \"%s\"\n", mOutputHdrPath.c_str() );
     }
     else {
-        fprintf( code, "#include <%s/%s-client.h>\n",   mHeaderPath.c_str(), replace( mProtocolName, "_", "-" ).c_str() );
-        fprintf( code, "#include <%s/%s-client.hpp>\n", mHeaderPath.c_str(), replace( mProtocolName, "_", "-" ).c_str() );
+        fprintf( code, "#include \"%s/%s-client.h\"\n",   mHeaderPath.c_str(), replace( mProtocolName, "_", "-" ).c_str() );
+        fprintf( code, "#include \"%s/%s\"\n", mHeaderPath.c_str(), mOutputHdrPath.c_str() );
     }
 
     fprintf( code, "\n" );

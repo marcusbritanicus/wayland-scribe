@@ -408,11 +408,11 @@ class ArgParser {
         size_t maxPositionalArgs = 0;
 
         std::string mName;
-        std::string mVersion     = "1.0";
-        std::string mDescr = "";
+        std::string mVersion = "1.0";
+        std::string mDescr   = "";
 
         std::function<void(bool)> mHelpCallback = nullptr;
-        std::function<void()> mmVersionCallback  = nullptr;
+        std::function<void()> mmVersionCallback = nullptr;
 
         void error( const std::string& message ) const {
             std::cerr << "Error: " << message << std::endl;

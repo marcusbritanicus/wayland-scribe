@@ -116,13 +116,13 @@ int main( int argc, char **argv ) {
     }
 
     /** Get the files to be generated */
-    uint file = ( parser.isSet( "--source" ) ? ( parser.isSet( "--header" ) ? 0 : 1 ) : ( parser.isSet( "--header" ) ? 2 : 0 ) );
+    uint file = ( parser.isSet( "source" ) ? ( parser.isSet( "header" ) ? 0 : 1 ) : ( parser.isSet( "header" ) ? 2 : 0 ) );
 
     /** Set the output file name, if specified */
     std::string output = parser.positionalValue( 1 );
 
     /** Set the main running mode */
-    scribe.setRunMode( specFile, parser.isSet( "--server" ), file, output );
+    scribe.setRunMode( specFile, parser.isSet( "server" ), file, output );
 
     /** Update other arguments */
     // Get the header-path, prefix, and add-include values, with defaults if not provided
