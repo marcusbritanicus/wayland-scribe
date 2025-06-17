@@ -65,8 +65,12 @@ static inline bool hasSuffix( const std::string& fName, char type ) {
 
 static inline std::string replace( const std::string& source, const std::string& what, const std::string& with ) {
     std::string temp = source;
+    size_t      pos  = temp.find( what );
 
-    temp.replace( temp.find( what ), what.size(), with );
+    if ( pos != std::string::npos ) {  // Only replace if found
+        temp.replace( pos, what.size(), with );
+    }
+
     return temp;
 }
 
@@ -126,6 +130,7 @@ void Wayland::Scribe::setRunMode( const std::string& specFile, bool server, uint
 
     if ( tempOutput.empty() ) {
         tempOutput = replace( specFile, ".xml", mServer ? "-server" : "-client" );
+        tempOutput = std::filesystem::path( tempOutput ).filename().string();
     }
 
     mFile = file;
@@ -1290,7 +1295,7 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
                 }
                 else {
                     if ( a.type == "string" ) {
-                        fprintf( code, "%s.c_str()", a.name.c_str() );
+                        fprintf( code, "%s", a.name.c_str() );
                     }
 
                     else if ( a.type == "array" ) {
@@ -1333,7 +1338,7 @@ void Wayland::Scribe::generateClientCode( FILE *code, std::vector<WaylandInterfa
                     const char *argumentName = a.name.c_str();
 
                     if ( a.type == "string" ) {
-                        fprintf( code, "std::string(%s)", snakeCaseToCamelCase( argumentName, false ).c_str() );
+                        fprintf( code, "%s", snakeCaseToCamelCase( argumentName, false ).c_str() );
                     }
                     else {
                         fprintf( code, "%s", snakeCaseToCamelCase( argumentName, false ).c_str() );

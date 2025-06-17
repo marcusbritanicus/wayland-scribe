@@ -26,18 +26,29 @@
 #include <iostream>
 
 #include "wayland-scribe.hpp"
-#include "cxxopts.hpp"
+#include "argparser.hpp"
 
 void printHelpText( bool err ) {
-    ( err ? std::cerr : std::cout ) << "Wayland::Scribe " << PROJECT_VERSION << std::endl << std::endl;
+    ( err ? std::cerr : std::cout ) << "Wayland::Scribe " << PROJECT_VERSION << std::endl;
+    ( err ? std::cerr : std::cout ) << "A simple program to generate C++ code from Wayland protocol XML spec." << std::endl << std::endl;
 
     ( err ? std::cerr : std::cout ) << "Usage:" << std::endl;
-    ( err ? std::cerr : std::cout ) << "  wayland-scribe --[server|client] specfile [options] --[source|header] output" << std::endl << std::endl;
+    ( err ? std::cerr : std::cout ) << "  wayland-scribe --[server|client] --[source|header] [options] specfile output" << std::endl << std::endl;
 
     ( err ? std::cerr : std::cout ) << "Options:" << std::endl;
+    ( err ? std::cerr : std::cout ) << "  -s|--server               Generate the server-side wrapper code for the protocol given in <spec>." << std::endl;
+    ( err ? std::cerr : std::cout ) << "  -c|--client               Generate the client-side wrapper code for the protocol given in <spec>." << std::endl;
+
+    ( err ? std::cerr : std::cout ) << "  --source                  Generate the source code for the given protocol, store it in output." << std::endl;
+    ( err ? std::cerr : std::cout ) << "  --header                  Generate the header code for the given protocol, store it in output." << std::endl;
+
     ( err ? std::cerr : std::cout ) << "  --header-path <path>      Path to the c header of this protocol (optional)." << std::endl;
     ( err ? std::cerr : std::cout ) << "  --prefix <prefix>         Prefix of interfaces (to be stripped; optional)." << std::endl;
-    ( err ? std::cerr : std::cout ) << "  --add-include <include>   Add extra include path (can speficy multiple times; optional)." << std::endl << std::endl;
+    ( err ? std::cerr : std::cout ) << "  --include <include>       Add extra includes (can speficy multiple times; optional)." << std::endl << std::endl;
+
+    ( err ? std::cerr : std::cout ) << "Arguments:" << std::endl;
+    ( err ? std::cerr : std::cout ) << "  specFile                  Path to the protocol xml specification file." << std::endl;
+    ( err ? std::cerr : std::cout ) << "  output                    Optional path in which generated code is stored. Auto-generated filename will be used if unspecified" << std::endl << std::endl;
 
     ( err ? std::cerr : std::cout ) << "Other options:" << std::endl;
     ( err ? std::cerr : std::cout ) << "  -h|--help                 Print this help text and exit." << std::endl;
@@ -47,65 +58,50 @@ void printHelpText( bool err ) {
 
 void printVersion() {
     std::cout << "Wayland::Scribe " << PROJECT_VERSION << std::endl;
+    std::cout << "A simple program to generate C++ code from Wayland protocol XML spec." << std::endl << std::endl;
 }
 
 
 int main( int argc, char **argv ) {
-    cxxopts::Options options( "Wayland::Scribe", "A simple program to generate C++ code from Wayland protocol XML spec." );
+    ArgParser parser( "Wayland Scribe", PROJECT_VERSION, "A simple program to generate C++ code from Wayland protocol XML spec." );
 
-    options.add_options()
-    ( "h,help", "Print this help" )
-    ( "v,version", "Print application version and exit" )
-    ( "s,server", "Generate the server-side wrapper code for the given protocol.", cxxopts::value<std::string> () )
-    ( "c,client", "Generate the client-side wrapper code for the given protocol.", cxxopts::value<std::string> () )
-    ( "source", "Generate the header code for the given protocol." )
-    ( "header", "Generate the source code for the given protocol." )
-    ( "header-path", "Path to the c header of this protocol (optional).", cxxopts::value<std::string> () )
-    ( "prefix", "Prefix of interfaces (to be stripped; optional).", cxxopts::value<std::string> () )
-    ( "add-include", "Additional include paths", cxxopts::value<std::vector<std::string> > () )
-    ( "output", "N", cxxopts::value<std::vector<std::string> > () );
+    parser.addHelpOption( printHelpText );
+    parser.addVersionOption( printVersion );
 
-    options.parse_positional( { "output" } );
+    parser.addOption( "server",      's',  ArgParser::NoArgument,                                  "Generate the server-side wrapper code for the protocol given in <spec>." );
+    parser.addOption( "client",      'c',  ArgParser::NoArgument,                                  "Generate the client-side wrapper code for the protocol given in <spec>." );
 
-    auto result = options.parse( argc, argv );
+    parser.addOption( "source",      '\0', ArgParser::NoArgument,                                  "Generate the source code for the given protocol, store it in output." );
+    parser.addOption( "header",      '\0', ArgParser::NoArgument,                                  "Generate the header code for the given protocol, store it in output." );
 
-    /** == Help and Version == **/
-    if ( result.count( "help" ) ) {
-        printHelpText( false );
-        return 0;
-    }
+    parser.addOption( "header-path", '\0', ArgParser::RequiredArgument,                            "Path to the c header of this protocol (optional)." );
+    parser.addOption( "prefix",      '\0', ArgParser::RequiredArgument,                            "Prefix of interfaces (to be stripped; optional)." );
+    parser.addOption( "include",     '\0', ArgParser::RequiredArgument | ArgParser::AllowMultiple, "Add extra includes (can speficy multiple times; optional)." );
 
-    if ( result.count( "version" ) ) {
-        printVersion();
-        return 0;
-    }
+    parser.addPositional( "specFile", ArgParser::PositionalRequired, "Path to the protocol xml specification file." );
+    parser.addPositional( "output",   ArgParser::PositionalOptional, "Optional path in which generated code is stored. Auto-generated filename will be used if unspecified." );
 
-    /** == Server and Client == **/
-    if ( result.count( "server" ) == result.count( "client" ) ) {
+    parser.parse( argc, argv );
+
+    /** == Server and Client: Both set or both not set == **/
+    if ( parser.isSet( "server" ) == parser.isSet( "client" ) ) {
         std::cerr << "[Error]: Please specify one of --server or --client" << std::endl << std::endl;
         printHelpText( true );
 
         return EXIT_FAILURE;
     }
 
-    // if ( ( strcmp( argv[ 1 ], "--server" ) != 0 ) && ( strcmp( argv[ 1 ], "--client" ) != 0 ) ) {
-    //     std::cerr << "[Error]: The first argument should be --server or --client" << std::endl <<
-    // std::endl;
-    //     printHelpText();
+    /*
+     * * == Protocol XML Spec File == *
+     ** Get the spec file
+     */
+    std::string specFile = parser.positionalValue( "specFile" );
 
-    //     return EXIT_FAILURE;
-    // }
+    if ( specFile.empty() ) {
+        std::cerr << "[Error]: Please specify protocol xml path" << std::endl << std::endl;
+        printHelpText( true );
 
-    if ( result.count( "output" ) != 1 ) {
-        std::vector<std::string> posArgs = result[ "output" ].as<std::vector<std::string> >();
-
-        std::cerr << "[Warning]: Ignoring the extra argument" << ( posArgs.size() == 1 ? ": (" : "s: (" );
-
-        for ( size_t i = 1; i < posArgs.size(); i++ ) {
-            std::cerr << posArgs.at( i ) << ( i == posArgs.size() - 1 ? ")" : " " );
-        }
-
-        std::cerr << std::endl << std::endl;
+        return EXIT_FAILURE;
     }
 
     /*** ------- End of error checking ------- ***/
@@ -113,35 +109,29 @@ int main( int argc, char **argv ) {
     /** Init our worker */
     Wayland::Scribe scribe;
 
-    /** Get the spec file */
-    std::string specFile;
-
-    if ( result.count( "server" ) ) {
-        specFile = result[ "server" ].as<std::string>();
-    }
-
-    else if ( result.count( "client" ) ) {
-        specFile = result[ "client" ].as<std::string>();
-    }
-
     // /** Ensure that that file exists */
     if ( fs::exists( specFile ) == false ) {
-        std::cerr << "[Error]: Unable to locate the file" << specFile.c_str();
+        std::cerr << "[Error]: Unable to locate the file: " << specFile.c_str();
         return EXIT_FAILURE;
     }
 
     /** Get the files to be generated */
-    uint file = ( result.count( "source" ) ? ( result.count( "header" ) ? 0 : 1 ) : ( result.count( "header" ) ? 2 : 0 ) );
+    uint file = ( parser.isSet( "--source" ) ? ( parser.isSet( "--header" ) ? 0 : 1 ) : ( parser.isSet( "--header" ) ? 2 : 0 ) );
 
     /** Set the output file name, if specified */
-    std::vector<std::string> posArgs = result[ "output" ].as<std::vector<std::string> >();
-    std::string              output  = ( posArgs.size() ? posArgs.at( 0 ) : "" );
+    std::string output = parser.positionalValue( 1 );
 
     /** Set the main running mode */
-    scribe.setRunMode( specFile, result.count( "server" ), file, output );
+    scribe.setRunMode( specFile, parser.isSet( "--server" ), file, output );
 
     /** Update other arguments */
-    scribe.setArgs( result[ "header-path" ].as<std::string>(), result[ "prefix" ].as<std::string>(), result[ "add-include" ].as<std::vector<std::string> >() );
+    // Get the header-path, prefix, and add-include values, with defaults if not provided
+    std::string              headerPath  = parser.value( "header-path" );
+    std::string              prefix      = parser.value( "prefix" );
+    std::vector<std::string> addIncludes = parser.values( "include" );
+
+    // Update the scribe with the arguments
+    scribe.setArgs( headerPath, prefix, addIncludes );
 
     if ( !scribe.process() ) {
         // scribe.printErrors();
